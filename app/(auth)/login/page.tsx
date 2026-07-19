@@ -19,16 +19,24 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) {
-      setError(error.message);
-      return;
+    try {
+      // Client construction throws if the Supabase env vars are missing, so it
+      // has to be inside the try — otherwise the rejection is swallowed and the
+      // form just sits there with no request and no message.
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      // Root page routes the user to their role home.
+      router.push('/');
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    // Root page routes the user to their role home.
-    router.push('/');
-    router.refresh();
   }
 
   return (

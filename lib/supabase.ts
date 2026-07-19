@@ -2,16 +2,15 @@ import { createBrowserClient, createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import type { cookies } from 'next/headers';
 import type { Database } from '@/types/database';
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+import { requireSupabaseEnv } from '@/lib/supabase-env';
 
 /**
  * Browser-side Supabase client (Client Components).
  * Respects RLS as the signed-in user.
  */
 export function createSupabaseBrowserClient() {
-  return createBrowserClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { url, anonKey } = requireSupabaseEnv();
+  return createBrowserClient<Database>(url, anonKey);
 }
 
 type CookieStore = ReturnType<typeof cookies>;
@@ -24,7 +23,8 @@ type CookieStore = ReturnType<typeof cookies>;
  * try/catch — session refresh is handled by middleware instead.
  */
 export function createSupabaseServerClient(cookieStore: CookieStore) {
-  return createServerClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  const { url, anonKey } = requireSupabaseEnv();
+  return createServerClient<Database>(url, anonKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -52,7 +52,8 @@ export function createSupabaseAdminClient() {
   if (!serviceKey) {
     throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set');
   }
-  return createClient<Database>(SUPABASE_URL, serviceKey, {
+  const { url } = requireSupabaseEnv();
+  return createClient<Database>(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
