@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npx next build)",
+      "Bash(node -e \"const os=require\\('os'\\); console.log\\('total GB', \\(os.totalmem\\(\\)/1e9\\).toFixed\\(1\\)\\); console.log\\('free GB', \\(os.freemem\\(\\)/1e9\\).toFixed\\(2\\)\\); console.log\\('cpus', os.cpus\\(\\).length\\)\")",
+      "Bash(NO_MINIFY=1 NODE_OPTIONS=\"--max-old-space-size=2048\" npx next build)",
+      "Bash(node -e \"const os=require\\('os'\\); console.log\\('free GB', \\(os.freemem\\(\\)/1e9\\).toFixed\\(2\\)\\)\")",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
+      "Bash(node -e \"console.log\\('supabase-js', require\\('@supabase/supabase-js/package.json'\\).version\\); console.log\\('ssr', require\\('@supabase/ssr/package.json'\\).version\\); console.log\\('postgrest', require\\('@supabase/postgrest-js/package.json'\\).version\\)\")",
+      "Bash(xargs grep -l \"GenericSchema\\\\|GenericTable\")",
+      "Bash(node -e \"console.log\\('ssr now', require\\('@supabase/ssr/package.json'\\).version\\)\")"
+    ]
+  }
+}

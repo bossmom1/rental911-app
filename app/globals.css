@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-navy: #0c447c;
+  --brand-gold: #ef9f27;
+  --brand-light-blue: #b5d4f4;
+  --brand-warning-yellow: #eab308;
+  --brand-text: #333333;
+}
+
+html {
+  /* Enforce 16px minimum base font size platform-wide — NO exceptions. */
+  font-size: 16px;
+}
+
+body {
+  color: var(--brand-text);
+  background: #ffffff;
+  font-family: var(--font-open-sans), sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6, .font-display {
+  font-family: var(--font-montserrat), sans-serif;
+  font-weight: 700;
+}
+
+/* Utility for the required GHL sidebar button so it stays consistent. */
+.ghl-button {
+  background-color: var(--brand-gold);
+  color: var(--brand-navy);
+  font-family: var(--font-montserrat), sans-serif;
+  font-weight: 700;
+}
