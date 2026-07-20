@@ -49,6 +49,9 @@ export function OnboardingWizard({
   const router = useRouter();
   const [step, setStep] = useState(Math.min(Math.max(initialStep, 1), 8));
   const [error, setError] = useState<string | null>(null);
+  // Separate from `pending`: the Stripe hop is a plain fetch + full navigation,
+  // not a server action, so useTransition never sees it.
+  const [connecting, setConnecting] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function run(fn: () => Promise<{ ok: boolean; step?: number; error?: string }>) {
@@ -281,14 +284,42 @@ export function OnboardingWizard({
                   Stripe Connect Express
                 </p>
                 <p className="mt-1">
-                  Secure bank connection and rent payouts are activated in{' '}
-                  <strong>Phase 2</strong>. You can continue onboarding now and
-                  connect your bank when rent collection goes live.
+                  Stripe collects your bank and identity details directly — Rental911
+                  never sees them. Tenants cannot pay rent until this is finished,
+                  but you can connect later and continue onboarding now.
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button disabled={pending} onClick={() => run(() => advanceStep(7))}>
-                  Continue
+                <Button
+                  variant="gold"
+                  disabled={pending || connecting}
+                  onClick={async () => {
+                    setError(null);
+                    setConnecting(true);
+                    try {
+                      const res = await fetch('/api/stripe/connect', { method: 'POST' });
+                      const data = await res.json();
+                      if (!res.ok || !data.ok) {
+                        setError(data.error ?? 'Could not start Stripe onboarding.');
+                        setConnecting(false);
+                        return;
+                      }
+                      // Stripe-hosted flow; returns to /landlord/onboarding.
+                      window.location.assign(data.url);
+                    } catch {
+                      setError('Could not reach Stripe. Please try again.');
+                      setConnecting(false);
+                    }
+                  }}
+                >
+                  {connecting ? 'Opening Stripe…' : 'Connect bank with Stripe'}
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={pending || connecting}
+                  onClick={() => run(() => advanceStep(7))}
+                >
+                  Skip for now
                 </Button>
               </div>
             </StepShell>

@@ -4,14 +4,18 @@ import { getCurrentUser } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PortalShell';
 import { StatCard } from '@/components/ui/StatCard';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { DataTable, EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/Badge';
 import { fmtMoney, fmtDate } from '@/lib/format';
+import { PayRentButton } from '@/components/tenant/PayRentButton';
 
 export const dynamic = 'force-dynamic';
 
-export default async function TenantRent() {
+export default async function TenantRent({
+  searchParams,
+}: {
+  searchParams?: { paid?: string; canceled?: string };
+}) {
   const supabase = createSupabaseServerClient(cookies());
   const current = await getCurrentUser();
 
@@ -35,6 +39,19 @@ export default async function TenantRent() {
     <>
       <PageHeader title="Rent" subtitle="Pay rent and view your payment history." />
 
+      {searchParams?.paid && (
+        <div className="mb-6 rounded-lg bg-green-50 px-4 py-3 text-green-800">
+          <strong>Payment submitted.</strong> Card payments post right away; bank
+          (ACH) payments can take 3–5 business days to clear, and this page updates
+          when they do.
+        </div>
+      )}
+      {searchParams?.canceled && (
+        <div className="mb-6 rounded-lg bg-light-blue/40 px-4 py-3 text-navy">
+          Checkout canceled — you have not been charged.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <StatCard
           tone="navy"
@@ -43,11 +60,10 @@ export default async function TenantRent() {
         />
         <Card className="flex flex-col justify-center">
           <p className="mb-3 text-ink/70">
-            Online rent payments (ACH &amp; card) go live in <strong>Phase 2</strong>.
+            Pay by bank transfer (ACH) or card. Bank transfers cost less and take
+            3–5 business days.
           </p>
-          <Button variant="gold" disabled>
-            Pay rent (coming soon)
-          </Button>
+          <PayRentButton disabled={!lease?.monthly_rent} />
         </Card>
       </div>
 

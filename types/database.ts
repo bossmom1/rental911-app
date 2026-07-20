@@ -41,6 +41,10 @@ export interface User {
   onboarding_step: number;
   access_level: AccessLevel;
   stripe_customer_id: string | null;
+  /** Landlord payout account (Connect Express) — null until onboarding starts. */
+  stripe_account_id: string | null;
+  /** Mirrors the Stripe account's charges_enabled; kept fresh by account.updated. */
+  stripe_charges_enabled: boolean | null;
   created_at: string;
 }
 
@@ -97,6 +101,8 @@ export interface RentPayment {
   status: RentStatus | null;
   stripe_payment_intent_id: string | null;
   stripe_transfer_id: string | null;
+  /** Checkout Session that produced this row — the webhook's idempotency key. */
+  stripe_checkout_session_id: string | null;
   platform_fee: number | null;
   created_at: string;
 }

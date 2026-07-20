@@ -22,6 +22,10 @@ create table if not exists public.users (
   onboarding_step integer default 1,
   access_level text check (access_level in ('full', 'limited')) default 'limited',
   stripe_customer_id text,
+  -- Landlord payout account (Connect Express) + its KYC state. See
+  -- migrations/0001_phase2_stripe.sql for existing databases.
+  stripe_account_id text,
+  stripe_charges_enabled boolean default false,
   created_at timestamptz default now()
 );
 
@@ -78,6 +82,7 @@ create table if not exists public.rent_payments (
   status text check (status in ('pending', 'paid', 'late', 'failed')),
   stripe_payment_intent_id text,
   stripe_transfer_id text,
+  stripe_checkout_session_id text,  -- webhook idempotency key
   platform_fee numeric,       -- 2.5% collected by Rental911
   created_at timestamptz default now()
 );
