@@ -4,9 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createSupabaseBrowserClient } from '@/lib/supabase';
+import { ROLE_HOME } from '@/lib/routes';
 import { Logo } from '@/components/ui/Logo';
 import { Field, Input } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
+import type { UserRole } from '@/types/database';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,14 +26,41 @@ export default function LoginPage() {
       // has to be inside the try — otherwise the rejection is swallowed and the
       // form just sits there with no request and no message.
       const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         setError(error.message);
         return;
       }
-      // Root page routes the user to their role home.
-      router.push('/');
+
+      // Middleware parks the original destination here when it bounces a
+      // signed-out user to /login. Read it off the URL rather than with
+      // useSearchParams so the page doesn't need a Suspense boundary.
+      const redirectedFrom = new URLSearchParams(window.location.search).get(
+        'redirectedFrom'
+      );
+
+      // Route straight to the role home. Going via '/' relied on the landing
+      // page's server-side redirect, which the client router cache serves from
+      // its signed-out copy — so the user just landed back on the marketing page.
+      let dest = redirectedFrom;
+      if (!dest) {
+        const { data: profile } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', data.user.id)
+          .maybeSingle();
+        const role = profile?.role as UserRole | undefined;
+        if (!role) {
+          setError('Your account has no role assigned yet. Please contact support.');
+          return;
+        }
+        dest = ROLE_HOME[role];
+      }
+
+      // refresh() first so the destination is fetched with the new session
+      // cookie; replace() keeps /login out of the back-stack.
       router.refresh();
+      router.replace(dest);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
