@@ -101,8 +101,15 @@ export interface RentPayment {
   status: RentStatus | null;
   stripe_payment_intent_id: string | null;
   stripe_transfer_id: string | null;
-  /** Checkout Session that produced this row — the webhook's idempotency key. */
+  /** Unused since direct charges replaced hosted Checkout; kept for old rows. */
   stripe_checkout_session_id: string | null;
+  /** 'ach' | 'card_credit' | 'card_debit' — decides who absorbed the fee. */
+  payment_method: string | null;
+  /** Charged to the tenant ON TOP of rent. Always 0 for debit cards. */
+  surcharge_amount: number | null;
+  /** What the tenant actually paid (rent + surcharge). */
+  total_charged: number | null;
+  /** Permanently null — Rental911 takes no cut of rent. */
   platform_fee: number | null;
   created_at: string;
 }
