@@ -16,12 +16,10 @@ export function getStripe(): Stripe {
   return _stripe;
 }
 
-/** Platform fee applied to every rent payment (2.5% by default). */
-export const PLATFORM_FEE_PERCENT = Number(
-  process.env.PLATFORM_FEE_PERCENT ?? '2.5'
-);
-
-/** Platform fee in cents for a given rent amount (in cents). */
-export function platformFeeCents(amountCents: number): number {
-  return Math.round(amountCents * (PLATFORM_FEE_PERCENT / 100));
-}
+/**
+ * NOTE: Rental911 takes no platform fee on rent. The entire tenant payment
+ * belongs to the landlord; Christine's revenue is flat service fees billed
+ * separately, outside this flow. The former PLATFORM_FEE_PERCENT /
+ * platformFeeCents helpers were removed deliberately — do not reintroduce an
+ * application fee on rent charges.
+ */

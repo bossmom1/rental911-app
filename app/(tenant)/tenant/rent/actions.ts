@@ -3,7 +3,7 @@
 import { cookies, headers } from 'next/headers';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth';
-import { getStripe, platformFeeCents } from '@/lib/stripe';
+import { getStripe } from '@/lib/stripe';
 
 export type CheckoutResult = { ok: true; url: string } | { ok: false; error: string };
 
@@ -24,9 +24,10 @@ function currentPeriodLabel(): string {
 /**
  * Start a hosted Stripe Checkout for this month's rent.
  *
- * Collected as a destination charge: the charge sits on the platform account,
- * `application_fee_amount` keeps the Rental911 cut, and the remainder transfers
- * to the landlord's Connect Express account.
+ * Rental911 takes NO cut of rent — the whole payment belongs to the landlord.
+ * Christine's revenue is flat service fees billed separately, entirely outside
+ * this flow, so there is deliberately no `application_fee_amount` here. Do not
+ * add one back.
  *
  * No rent_payments row is written here — RLS gives tenants select-only on that
  * table, and more importantly a payment isn't real until Stripe confirms it.
@@ -106,7 +107,7 @@ export async function startRentCheckout(): Promise<CheckoutResult> {
         },
       ],
       payment_intent_data: {
-        application_fee_amount: platformFeeCents(amountCents),
+        // No application_fee_amount: the full rent goes to the landlord.
         transfer_data: { destination: landlord.stripe_account_id },
         metadata: {
           rental911_lease_id: lease.id,

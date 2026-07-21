@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import type Stripe from 'stripe';
 import { createSupabaseAdminClient } from '@/lib/supabase';
-import { getStripe, platformFeeCents } from '@/lib/stripe';
+import { getStripe } from '@/lib/stripe';
 
 /**
  * POST /api/stripe/webhook — records rent payments and payout-account state.
@@ -59,7 +59,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           ? session.payment_intent
           : session.payment_intent?.id ?? null,
       stripe_checkout_session_id: session.id,
-      platform_fee: centsToDollars(platformFeeCents(amountCents)),
+      // platform_fee intentionally not written: Rental911 takes no cut of rent.
     },
     { onConflict: 'stripe_checkout_session_id' }
   );
