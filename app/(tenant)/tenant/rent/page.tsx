@@ -7,7 +7,8 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { DataTable, EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/Badge';
 import { fmtMoney, fmtDate } from '@/lib/format';
-import { PayRentButton } from '@/components/tenant/PayRentButton';
+import { RentPayment } from '@/components/tenant/RentPayment';
+import { quoteRent } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +36,11 @@ export default async function TenantRent({
 
   const rows = payments ?? [];
 
+  // Surcharges must be disclosed before the tenant picks a method, so the quote
+  // is resolved server-side and passed down rather than fetched on click.
+  const quoteResult = await quoteRent();
+  const quote = quoteResult.ok ? quoteResult : null;
+
   return (
     <>
       <PageHeader title="Rent" subtitle="Pay rent and view your payment history." />
@@ -59,11 +65,7 @@ export default async function TenantRent({
           value={fmtMoney(lease?.monthly_rent)}
         />
         <Card className="flex flex-col justify-center">
-          <p className="mb-3 text-ink/70">
-            Pay by bank transfer (ACH) or card. Bank transfers cost less and take
-            3–5 business days.
-          </p>
-          <PayRentButton disabled={!lease?.monthly_rent} />
+          <RentPayment quote={quote} />
         </Card>
       </div>
 

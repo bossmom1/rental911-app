@@ -12,9 +12,11 @@ import { getStripe } from '@/lib/stripe';
  *         one-time Stripe-hosted onboarding URL to redirect to.
  * GET  -> reports whether the account exists and can accept charges.
  *
- * Rent is collected as a DESTINATION charge: the charge lives on the platform
- * account and is transferred to the landlord, so the connected account only
- * needs the `transfers` capability, not full card_payments KYC.
+ * Rent is collected as a DIRECT charge on this account, which makes the landlord
+ * the merchant of record: Stripe's fee, refunds, and chargebacks all settle
+ * against their balance and never the platform's. That requires full payment
+ * capabilities (card_payments + us_bank_account_ach_payments), which is heavier
+ * KYC than the `transfers` a destination charge would have needed.
  */
 
 function siteUrl(request: NextRequest): string {
@@ -44,7 +46,10 @@ export async function POST(request: NextRequest) {
       const account = await stripe.accounts.create({
         type: 'express',
         email: current.email,
-        capabilities: { transfers: { requested: true } },
+        capabilities: {
+          card_payments: { requested: true },
+          us_bank_account_ach_payments: { requested: true },
+        },
         business_profile: { product_description: 'Residential rent collection' },
         metadata: { rental911_user_id: current.authId },
       });

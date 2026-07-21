@@ -6,13 +6,16 @@ import { getStripe } from '@/lib/stripe';
 /**
  * POST /api/stripe/webhook — records rent payments and payout-account state.
  *
- * Writes with the service-role client: Stripe is unauthenticated to us, so
- * there is no user session to satisfy RLS.
+ * Rent is a DIRECT charge on the landlord's connected account, so these arrive
+ * as CONNECT events with `event.account` set. Register this as a Connect webhook
+ * endpoint in the dashboard; locally use `stripe listen --forward-connect-to`.
  *
- * Idempotency matters — Stripe retries deliveries, and for ACH the same payment
- * arrives twice by design (checkout.session.completed while still `processing`,
- * then payment_intent.succeeded days later when it settles). Rows are keyed on
- * stripe_checkout_session_id (unique index) so retries update rather than duplicate.
+ * Writes with the service-role client: Stripe is unauthenticated to us, so there
+ * is no session to satisfy RLS.
+ *
+ * Idempotency matters — Stripe retries deliveries, and ACH reports twice by
+ * design (payment_intent.processing while settling, then .succeeded days later).
+ * Rows key on stripe_payment_intent_id (unique index) so retries update in place.
  */
 
 // Stripe needs the unparsed body to verify the signature.
@@ -32,36 +35,48 @@ function periodStart(unixSeconds: number): string {
     .slice(0, 10);
 }
 
-async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
-  const admin = createSupabaseAdminClient();
-  const leaseId = session.metadata?.rental911_lease_id ?? null;
-  const tenantId = session.metadata?.rental911_tenant_id ?? null;
+/** 'ach' | 'card_credit' | 'card_debit', matching the DB check constraint. */
+function methodLabel(intent: Stripe.PaymentIntent): string | null {
+  const method = intent.metadata?.rental911_method;
+  if (method === 'ach') return 'ach';
+  if (method !== 'card') return null;
+  return intent.metadata?.rental911_card_funding === 'credit'
+    ? 'card_credit'
+    : 'card_debit';
+}
+
+/**
+ * Upsert the row for a PaymentIntent. `amount` is always the RENT; the surcharge
+ * and the tenant's true total are recorded separately so payouts reconcile.
+ */
+async function recordIntent(intent: Stripe.PaymentIntent, status: 'pending' | 'paid' | 'failed') {
+  const leaseId = intent.metadata?.rental911_lease_id ?? null;
+  const tenantId = intent.metadata?.rental911_tenant_id ?? null;
 
   if (!leaseId || !tenantId) {
-    console.warn('[stripe/webhook] session %s missing Rental911 metadata', session.id);
+    // Not one of ours (e.g. a `stripe trigger` synthetic event).
+    console.warn('[stripe/webhook] intent %s missing Rental911 metadata', intent.id);
     return;
   }
 
-  const amountCents = session.amount_total ?? 0;
-  // Card sessions arrive already paid; ACH arrives unpaid and settles later.
-  const paid = session.payment_status === 'paid';
+  const rentCents = Number(intent.metadata?.rental911_rent_cents ?? 0);
+  const surchargeCents = Number(intent.metadata?.rental911_surcharge_cents ?? 0);
 
+  const admin = createSupabaseAdminClient();
   const { error } = await admin.from('rent_payments').upsert(
     {
       lease_id: leaseId,
       tenant_id: tenantId,
-      amount: centsToDollars(amountCents),
-      due_date: periodStart(session.created),
-      paid_date: paid ? today() : null,
-      status: paid ? 'paid' : 'pending',
-      stripe_payment_intent_id:
-        typeof session.payment_intent === 'string'
-          ? session.payment_intent
-          : session.payment_intent?.id ?? null,
-      stripe_checkout_session_id: session.id,
-      // platform_fee intentionally not written: Rental911 takes no cut of rent.
+      amount: centsToDollars(rentCents),
+      surcharge_amount: centsToDollars(surchargeCents),
+      total_charged: centsToDollars(intent.amount),
+      payment_method: methodLabel(intent),
+      due_date: periodStart(intent.created),
+      paid_date: status === 'paid' ? today() : null,
+      status,
+      stripe_payment_intent_id: intent.id,
     },
-    { onConflict: 'stripe_checkout_session_id' }
+    { onConflict: 'stripe_payment_intent_id' }
   );
 
   if (error) {
@@ -69,48 +84,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     // record is far worse than a noisy retry.
     throw new Error(`rent_payments upsert failed: ${error.message}`);
   }
-}
-
-async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
-  const admin = createSupabaseAdminClient();
-
-  // Destination charges create a Transfer; capture its id for reconciliation.
-  let transferId: string | null = null;
-  try {
-    const chargeId =
-      typeof intent.latest_charge === 'string'
-        ? intent.latest_charge
-        : intent.latest_charge?.id;
-    if (chargeId) {
-      const charge = await getStripe().charges.retrieve(chargeId);
-      transferId =
-        typeof charge.transfer === 'string' ? charge.transfer : charge.transfer?.id ?? null;
-    }
-  } catch (err) {
-    // Non-fatal: the payment is still real without the transfer id.
-    console.warn('[stripe/webhook] could not resolve transfer id:', err);
-  }
-
-  const { error } = await admin
-    .from('rent_payments')
-    .update({
-      status: 'paid',
-      paid_date: today(),
-      ...(transferId ? { stripe_transfer_id: transferId } : {}),
-    })
-    .eq('stripe_payment_intent_id', intent.id);
-
-  if (error) throw new Error(`rent_payments update failed: ${error.message}`);
-}
-
-async function handlePaymentIntentFailed(intent: Stripe.PaymentIntent) {
-  const admin = createSupabaseAdminClient();
-  const { error } = await admin
-    .from('rent_payments')
-    .update({ status: 'failed' })
-    .eq('stripe_payment_intent_id', intent.id);
-
-  if (error) throw new Error(`rent_payments failure update failed: ${error.message}`);
 }
 
 async function handleAccountUpdated(account: Stripe.Account) {
@@ -145,14 +118,16 @@ export async function POST(request: NextRequest) {
 
   try {
     switch (event.type) {
-      case 'checkout.session.completed':
-        await handleCheckoutCompleted(event.data.object);
+      // ACH: settling. Card rarely lands here.
+      case 'payment_intent.processing':
+        await recordIntent(event.data.object, 'pending');
         break;
       case 'payment_intent.succeeded':
-        await handlePaymentIntentSucceeded(event.data.object);
+        await recordIntent(event.data.object, 'paid');
         break;
       case 'payment_intent.payment_failed':
-        await handlePaymentIntentFailed(event.data.object);
+        // Covers late ACH failures (e.g. R01) that arrive days after settling.
+        await recordIntent(event.data.object, 'failed');
         break;
       case 'account.updated':
         await handleAccountUpdated(event.data.object);
