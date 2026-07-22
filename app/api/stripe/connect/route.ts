@@ -15,8 +15,9 @@ import { getStripe } from '@/lib/stripe';
  * Rent is collected as a DIRECT charge on this account, which makes the landlord
  * the merchant of record: Stripe's fee, refunds, and chargebacks all settle
  * against their balance and never the platform's. That requires full payment
- * capabilities (card_payments + us_bank_account_ach_payments), which is heavier
- * KYC than the `transfers` a destination charge would have needed.
+ * capabilities (card_payments + us_bank_account_ach_payments). Stripe also
+ * requires `transfers` to be requested alongside card_payments, even though
+ * this account never receives a Transfer object.
  */
 
 function siteUrl(request: NextRequest): string {
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
         capabilities: {
           card_payments: { requested: true },
           us_bank_account_ach_payments: { requested: true },
+          transfers: { requested: true },
         },
         business_profile: { product_description: 'Residential rent collection' },
         metadata: { rental911_user_id: current.authId },
