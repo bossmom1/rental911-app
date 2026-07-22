@@ -232,6 +232,36 @@ as $$
   select exists (select 1 from public.users where id = auth.uid() and role = 'admin')
 $$;
 
+-- properties and units policies each cross-reference the other table; without
+-- these SECURITY DEFINER helpers, a query joining units -> properties makes
+-- Postgres evaluate both policies, which re-trigger each other's RLS forever
+-- ("infinite recursion detected in policy for relation properties").
+create or replace function public.property_owned_by_caller(prop_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.properties where id = prop_id and landlord_id = auth.uid()
+  )
+$$;
+
+create or replace function public.property_leased_by_caller(prop_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.units u
+    join public.leases l on l.unit_id = u.id
+    where u.property_id = prop_id and l.tenant_id = auth.uid()
+  )
+$$;
+
 -- Enable RLS on every table.
 alter table public.users               enable row level security;
 alter table public.properties          enable row level security;
@@ -277,13 +307,7 @@ create policy properties_landlord_all on public.properties
 -- A tenant may read the property behind their leased unit.
 drop policy if exists properties_tenant_read on public.properties;
 create policy properties_tenant_read on public.properties
-  for select using (
-    id in (
-      select u.property_id from public.units u
-      join public.leases l on l.unit_id = u.id
-      where l.tenant_id = auth.uid()
-    )
-  );
+  for select using (public.property_leased_by_caller(id));
 
 -- ---- units ------------------------------------------------------------------
 drop policy if exists units_admin_all on public.units;
@@ -292,11 +316,8 @@ create policy units_admin_all on public.units
 
 drop policy if exists units_landlord_all on public.units;
 create policy units_landlord_all on public.units
-  for all using (
-    property_id in (select id from public.properties where landlord_id = auth.uid())
-  ) with check (
-    property_id in (select id from public.properties where landlord_id = auth.uid())
-  );
+  for all using (public.property_owned_by_caller(property_id))
+  with check (public.property_owned_by_caller(property_id));
 
 drop policy if exists units_tenant_read on public.units;
 create policy units_tenant_read on public.units
