@@ -20,6 +20,7 @@ const usd = (cents: number) =>
 
 type Quote = {
   rentCents: number;
+  lateFeeCents: number;
   achSurchargeCents: number;
   achTotalCents: number;
   creditSurchargeCents: number;
@@ -32,6 +33,7 @@ type ActiveIntent = {
   connectedAccountId: string;
   method: PaymentMethodChoice;
   rentCents: number;
+  lateFeeCents: number;
   surchargeCents: number;
   totalCents: number;
 };
@@ -72,6 +74,7 @@ export function RentPayment({ quote }: { quote: Quote | null }) {
       connectedAccountId: result.connectedAccountId,
       method,
       rentCents: result.rentCents,
+      lateFeeCents: result.lateFeeCents,
       surchargeCents: result.surchargeCents,
       totalCents: result.totalCents,
     });
@@ -93,6 +96,14 @@ export function RentPayment({ quote }: { quote: Quote | null }) {
     <div>
       <p className="mb-4 text-ink/70">Choose how you&apos;d like to pay.</p>
 
+      {quote.lateFeeCents > 0 && (
+        <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800">
+          <strong>Late fee applied.</strong> Rent was due by the 5th of the month, so
+          a {usd(quote.lateFeeCents)} late fee (5% of rent) is included in the totals
+          below, shown as its own line.
+        </div>
+      )}
+
       <div className="space-y-3">
         <button
           type="button"
@@ -104,8 +115,9 @@ export function RentPayment({ quote }: { quote: Quote | null }) {
             Bank transfer (ACH) — {usd(quote.achTotalCents)}
           </span>
           <span className="mt-1 block text-sm text-ink/70">
-            {usd(quote.rentCents)} rent + {usd(quote.achSurchargeCents)} processing
-            fee. Takes 3–5 business days.
+            {usd(quote.rentCents)} rent
+            {quote.lateFeeCents > 0 ? ` + ${usd(quote.lateFeeCents)} late fee` : ''} +{' '}
+            {usd(quote.achSurchargeCents)} processing fee. Takes 3–5 business days.
           </span>
         </button>
 
@@ -116,10 +128,11 @@ export function RentPayment({ quote }: { quote: Quote | null }) {
           className="w-full rounded-lg border-2 border-light-blue p-4 text-left transition hover:bg-light-blue/30 disabled:opacity-50"
         >
           <span className="block font-display font-bold text-navy">
-            Card — {usd(quote.rentCents)} to {usd(quote.creditTotalCents)}
+            Card — {usd(quote.rentCents + quote.lateFeeCents)} to {usd(quote.creditTotalCents)}
           </span>
           <span className="mt-1 block text-sm text-ink/70">
-            Debit cards pay {usd(quote.rentCents)} with no fee. Credit cards add a{' '}
+            {quote.lateFeeCents > 0 && `Includes a ${usd(quote.lateFeeCents)} late fee. `}
+            Debit cards add no processing fee. Credit cards add a{' '}
             {usd(quote.creditSurchargeCents)} processing fee. Posts immediately.
           </span>
         </button>
@@ -238,6 +251,12 @@ function InnerForm({ intent, onBack }: { intent: ActiveIntent; onBack: () => voi
           <span>Rent</span>
           <span>{usd(intent.rentCents)}</span>
         </div>
+        {intent.lateFeeCents > 0 && (
+          <div className="mt-1 flex justify-between text-red-700">
+            <span>Late fee (5% — rent was due by the 5th)</span>
+            <span>{usd(intent.lateFeeCents)}</span>
+          </div>
+        )}
         {intent.method === 'ach' ? (
           <div className="mt-1 flex justify-between">
             <span>Processing fee</span>

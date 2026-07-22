@@ -75,3 +75,23 @@ export function cardSurchargeCents(
 ): number {
   return funding === 'credit' ? creditSurchargeCents(rentCents) : 0;
 }
+
+/**
+ * Late fees. Rent is due by the 5th of the month; a payment initiated on the
+ * 6th or later gets a flat 5% late fee (Maryland's statutory cap). Applies to
+ * every lease under the same rule for now — no per-lease custom terms yet.
+ *
+ * Locked in at PaymentIntent-creation time (carried via metadata) so the
+ * decision can't flip between create and confirm if a card payment straddles
+ * midnight. Uses UTC to match `due_date`/`today()` elsewhere in the webhook.
+ */
+export const RENT_DUE_DAY = 5;
+export const LATE_FEE_PERCENT = 0.05;
+
+export function isRentLate(now: Date = new Date()): boolean {
+  return now.getUTCDate() > RENT_DUE_DAY;
+}
+
+export function lateFeeCents(rentCents: number): number {
+  return Math.round(rentCents * LATE_FEE_PERCENT);
+}

@@ -2,51 +2,126 @@ import { cookies } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase';
 import { PageHeader } from '@/components/ui/PortalShell';
 import { StatCard } from '@/components/ui/StatCard';
-import { Card } from '@/components/ui/Card';
-import { fmtMoney } from '@/lib/format';
+import { Card, CardHeader } from '@/components/ui/Card';
+import { DataTable, EmptyState } from '@/components/ui/EmptyState';
+import { fmtMoney, fmtDate } from '@/lib/format';
+import {
+  fetchPaymentRows,
+  isThisMonth,
+  LATE_STATUSES,
+  OUTSTANDING_STATUSES,
+  sumAmount,
+  sumLateFees,
+} from '@/lib/financials';
 
 export const dynamic = 'force-dynamic';
 
+const methodLabels: Record<string, string> = {
+  ach: 'Bank transfer',
+  card_credit: 'Credit card',
+  card_debit: 'Debit card',
+};
+
 export default async function AdminFinancials() {
   const supabase = createSupabaseServerClient(cookies());
-  const { data: payments } = await supabase
-    .from('rent_payments')
-    .select('amount, platform_fee, status');
+  const rows = await fetchPaymentRows(supabase);
 
-  const rows = payments ?? [];
-  const paid = rows.filter((p) => p.status === 'paid');
-  const collected = paid.reduce((s, p) => s + Number(p.amount ?? 0), 0);
-  const fees = paid.reduce((s, p) => s + Number(p.platform_fee ?? 0), 0);
-  const outstanding = rows
-    .filter((p) => ['pending', 'late', 'failed'].includes(p.status ?? ''))
-    .reduce((s, p) => s + Number(p.amount ?? 0), 0);
+  const paidThisMonth = rows.filter((r) => r.status === 'paid' && isThisMonth(r.paid_date));
+  const collectedThisMonth = sumAmount(paidThisMonth);
+  const lateFeesThisMonth = sumLateFees(paidThisMonth);
+  const outstandingRows = rows.filter((r) => OUTSTANDING_STATUSES.includes(r.status ?? ''));
+  const outstanding = sumAmount(outstandingRows);
+  const lateRows = rows
+    .filter((r) => LATE_STATUSES.includes(r.status ?? ''))
+    .sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''));
+
+  // Group by property for the per-property table.
+  const byProperty = new Map<
+    string,
+    { name: string; unitIds: Set<string>; due: number; collected: number; lateFees: number; outstanding: number }
+  >();
+  for (const r of rows) {
+    const key = r.property_id ?? 'unassigned';
+    if (!byProperty.has(key)) {
+      byProperty.set(key, {
+        name: r.property_name ?? 'Unassigned property',
+        unitIds: new Set(),
+        due: 0,
+        collected: 0,
+        lateFees: 0,
+        outstanding: 0,
+      });
+    }
+    const entry = byProperty.get(key)!;
+    if (r.unit_number) entry.unitIds.add(`${key}:${r.unit_number}`);
+    const amount = Number(r.amount ?? 0);
+    entry.due += amount;
+    if (r.status === 'paid' && isThisMonth(r.paid_date)) {
+      entry.collected += amount;
+      entry.lateFees += Number(r.late_fee_amount ?? 0);
+    }
+    if (OUTSTANDING_STATUSES.includes(r.status ?? '')) entry.outstanding += amount;
+  }
+  const propertyRows = [...byProperty.values()].sort((a, b) => b.due - a.due);
 
   return (
     <>
       <PageHeader
         title="Financials"
-        subtitle="Platform-wide rent collection and fee revenue."
+        subtitle="Platform-wide rent collection. Rental911 takes no cut of rent — there is no platform-fee figure here."
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard tone="gold" label="Total Collected" value={fmtMoney(collected)} />
+        <StatCard tone="gold" label="Rent Collected This Month" value={fmtMoney(collectedThisMonth)} />
         <StatCard
-          tone="navy"
-          label="Platform Fees Earned"
-          value={fmtMoney(fees)}
-          sublabel="2.5% of rent collected"
+          tone="lightBlue"
+          label="Late Fees Collected This Month"
+          value={fmtMoney(lateFeesThisMonth)}
+          sublabel="5% of rent, tenant-paid — not blended into rent"
         />
-        <StatCard tone="gold" label="Outstanding" value={fmtMoney(outstanding)} />
+        <StatCard tone="navy" label="Outstanding Balances" value={fmtMoney(outstanding)} />
       </div>
 
       <Card className="mt-8">
-        <p className="text-ink/70">
-          Full financial reporting — per-property P&amp;L, monthly statements, and
-          year-end CSV exports — is delivered in <strong>Phase 2</strong> (rent
-          collection + Stripe Connect) and <strong>Phase 4</strong> (reporting).
-          Totals above reflect any <code>rent_payments</code> already in the
-          database.
-        </p>
+        <CardHeader title="By property" subtitle="Rent due, collected this month, late fees, and outstanding, per property." />
+        {propertyRows.length === 0 ? (
+          <EmptyState title="No rent activity yet" message="Payments will appear here once tenants start paying rent." />
+        ) : (
+          <DataTable columns={['Property', 'Units', 'Rent Due', 'Rent Collected', 'Late Fees', 'Outstanding']}>
+            {propertyRows.map((p, i) => (
+              <tr key={i}>
+                <td className="px-4 py-3 font-display font-bold text-navy">{p.name}</td>
+                <td className="px-4 py-3">{p.unitIds.size || '—'}</td>
+                <td className="px-4 py-3">{fmtMoney(p.due)}</td>
+                <td className="px-4 py-3">{fmtMoney(p.collected)}</td>
+                <td className="px-4 py-3">{fmtMoney(p.lateFees)}</td>
+                <td className="px-4 py-3">{fmtMoney(p.outstanding)}</td>
+              </tr>
+            ))}
+          </DataTable>
+        )}
+      </Card>
+
+      <Card className="mt-8">
+        <CardHeader title="Late rent" subtitle="Payments currently late or failed." />
+        {lateRows.length === 0 ? (
+          <EmptyState title="Nothing late" message="All rent is current." />
+        ) : (
+          <DataTable columns={['Tenant', 'Property', 'Amount', 'Due Date', 'Status']}>
+            {lateRows.map((r) => (
+              <tr key={r.id}>
+                <td className="px-4 py-3 font-display font-bold text-navy">{r.tenant_name || '—'}</td>
+                <td className="px-4 py-3">
+                  {r.property_name || '—'}
+                  {r.unit_number ? `, Unit ${r.unit_number}` : ''}
+                </td>
+                <td className="px-4 py-3">{fmtMoney(r.amount)}</td>
+                <td className="px-4 py-3">{fmtDate(r.due_date)}</td>
+                <td className="px-4 py-3 capitalize">{r.status}</td>
+              </tr>
+            ))}
+          </DataTable>
+        )}
       </Card>
     </>
   );

@@ -8,6 +8,8 @@ import {
   achSurchargeCents,
   cardSurchargeCents,
   creditSurchargeCents,
+  isRentLate,
+  lateFeeCents,
 } from '@/lib/stripe';
 
 /**
@@ -24,6 +26,10 @@ import {
  * Debit vs credit cannot be known before the card is entered, which is why the
  * card path is create-intent -> read funding -> update amount -> confirm, rather
  * than a single hosted Checkout call. Every amount is computed server-side.
+ *
+ * Late fees (5% flat, rent due by the 5th) are decided once, at intent-creation
+ * time, and carried via metadata into the confirm step — so a card payment that
+ * straddles midnight can't have the late-fee decision flip mid-flow.
  */
 
 export type PaymentMethodChoice = 'ach' | 'card';
@@ -35,6 +41,7 @@ export type IntentResult =
       paymentIntentId: string;
       connectedAccountId: string;
       rentCents: number;
+      lateFeeCents: number;
       surchargeCents: number;
       totalCents: number;
     }
@@ -133,8 +140,9 @@ export async function createRentIntent(
       };
     }
 
+    const lateFee = isRentLate() ? lateFeeCents(ctx.rentCents) : 0;
     const surchargeCents = method === 'ach' ? achSurchargeCents(ctx.rentCents) : 0;
-    const totalCents = ctx.rentCents + surchargeCents;
+    const totalCents = ctx.rentCents + lateFee + surchargeCents;
 
     const intent = await stripe.paymentIntents.create(
       {
@@ -149,6 +157,7 @@ export async function createRentIntent(
           rental911_period: period,
           rental911_method: method,
           rental911_rent_cents: String(ctx.rentCents),
+          rental911_late_fee_cents: String(lateFee),
           rental911_surcharge_cents: String(surchargeCents),
         },
       },
@@ -167,6 +176,7 @@ export async function createRentIntent(
       paymentIntentId: intent.id,
       connectedAccountId: ctx.connectedAccountId,
       rentCents: ctx.rentCents,
+      lateFeeCents: lateFee,
       surchargeCents,
       totalCents,
     };
@@ -204,7 +214,10 @@ export async function confirmCardRent(
     const method = await stripe.paymentMethods.retrieve(paymentMethodId, opts);
     const funding = method.card?.funding ?? null;
     const surchargeCents = cardSurchargeCents(ctx.rentCents, funding);
-    const totalCents = ctx.rentCents + surchargeCents;
+    // Late fee was already decided at create-intent time — read it back rather
+    // than re-evaluating "today," so it can't change between create and confirm.
+    const lateFee = Number(intent.metadata?.rental911_late_fee_cents ?? 0);
+    const totalCents = ctx.rentCents + lateFee + surchargeCents;
 
     // Amount is set server-side from the funding type the network reported.
     const confirmed = await stripe.paymentIntents.update(
@@ -244,12 +257,15 @@ export async function confirmCardRent(
 /**
  * What the tenant would pay by each method, for disclosure BEFORE they choose.
  * Surcharges must be disclosed pre-purchase; the card figure is the credit-card
- * worst case, and a debit card is charged the bare rent instead.
+ * worst case, and a debit card is charged the bare rent instead. The late fee
+ * (if today is the 6th or later) is disclosed here too, as its own figure —
+ * separate from rent and separate from any card/ACH surcharge.
  */
 export async function quoteRent(): Promise<
   | {
       ok: true;
       rentCents: number;
+      lateFeeCents: number;
       achTotalCents: number;
       achSurchargeCents: number;
       creditTotalCents: number;
@@ -260,15 +276,17 @@ export async function quoteRent(): Promise<
   const ctx = await loadRentContext();
   if ('error' in ctx) return { ok: false, error: ctx.error };
 
+  const lateFee = isRentLate() ? lateFeeCents(ctx.rentCents) : 0;
   const ach = achSurchargeCents(ctx.rentCents);
   const credit = creditSurchargeCents(ctx.rentCents);
 
   return {
     ok: true,
     rentCents: ctx.rentCents,
+    lateFeeCents: lateFee,
     achSurchargeCents: ach,
-    achTotalCents: ctx.rentCents + ach,
+    achTotalCents: ctx.rentCents + lateFee + ach,
     creditSurchargeCents: credit,
-    creditTotalCents: ctx.rentCents + credit,
+    creditTotalCents: ctx.rentCents + lateFee + credit,
   };
 }

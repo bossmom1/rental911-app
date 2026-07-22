@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import type Stripe from 'stripe';
 import { createSupabaseAdminClient } from '@/lib/supabase';
-import { getStripe } from '@/lib/stripe';
+import { getStripe, RENT_DUE_DAY } from '@/lib/stripe';
+import { generateAndSendReceipt } from '@/lib/receipts';
 
 /**
  * POST /api/stripe/webhook — records rent payments and payout-account state.
@@ -27,10 +28,11 @@ const centsToDollars = (cents: number | null | undefined) =>
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-/** First of the month the charge was created in — gives the history table a Due date. */
-function periodStart(unixSeconds: number): string {
+/** The 5th of the month the charge was created in — rent's actual due date, and
+ * what late-fee eligibility is measured against (see lib/stripe.ts isRentLate). */
+function periodDueDate(unixSeconds: number): string {
   const d = new Date(unixSeconds * 1000);
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1))
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), RENT_DUE_DAY))
     .toISOString()
     .slice(0, 10);
 }
@@ -48,42 +50,54 @@ function methodLabel(intent: Stripe.PaymentIntent): string | null {
 /**
  * Upsert the row for a PaymentIntent. `amount` is always the RENT; the surcharge
  * and the tenant's true total are recorded separately so payouts reconcile.
+ * Returns the row id so callers can trigger follow-up work (e.g. receipts).
  */
-async function recordIntent(intent: Stripe.PaymentIntent, status: 'pending' | 'paid' | 'failed') {
+async function recordIntent(
+  intent: Stripe.PaymentIntent,
+  status: 'pending' | 'paid' | 'failed'
+): Promise<string | null> {
   const leaseId = intent.metadata?.rental911_lease_id ?? null;
   const tenantId = intent.metadata?.rental911_tenant_id ?? null;
 
   if (!leaseId || !tenantId) {
     // Not one of ours (e.g. a `stripe trigger` synthetic event).
     console.warn('[stripe/webhook] intent %s missing Rental911 metadata', intent.id);
-    return;
+    return null;
   }
 
   const rentCents = Number(intent.metadata?.rental911_rent_cents ?? 0);
+  const lateFeeCents = Number(intent.metadata?.rental911_late_fee_cents ?? 0);
   const surchargeCents = Number(intent.metadata?.rental911_surcharge_cents ?? 0);
 
   const admin = createSupabaseAdminClient();
-  const { error } = await admin.from('rent_payments').upsert(
-    {
-      lease_id: leaseId,
-      tenant_id: tenantId,
-      amount: centsToDollars(rentCents),
-      surcharge_amount: centsToDollars(surchargeCents),
-      total_charged: centsToDollars(intent.amount),
-      payment_method: methodLabel(intent),
-      due_date: periodStart(intent.created),
-      paid_date: status === 'paid' ? today() : null,
-      status,
-      stripe_payment_intent_id: intent.id,
-    },
-    { onConflict: 'stripe_payment_intent_id' }
-  );
+  const { data, error } = await admin
+    .from('rent_payments')
+    .upsert(
+      {
+        lease_id: leaseId,
+        tenant_id: tenantId,
+        amount: centsToDollars(rentCents),
+        late_fee_amount: centsToDollars(lateFeeCents),
+        surcharge_amount: centsToDollars(surchargeCents),
+        total_charged: centsToDollars(intent.amount),
+        payment_method: methodLabel(intent),
+        due_date: periodDueDate(intent.created),
+        paid_date: status === 'paid' ? today() : null,
+        status,
+        stripe_payment_intent_id: intent.id,
+      },
+      { onConflict: 'stripe_payment_intent_id' }
+    )
+    .select('id')
+    .single();
 
   if (error) {
     // Throw so the handler 500s and Stripe retries — silently losing a payment
     // record is far worse than a noisy retry.
     throw new Error(`rent_payments upsert failed: ${error.message}`);
   }
+
+  return data.id;
 }
 
 async function handleAccountUpdated(account: Stripe.Account) {
@@ -122,9 +136,14 @@ export async function POST(request: NextRequest) {
       case 'payment_intent.processing':
         await recordIntent(event.data.object, 'pending');
         break;
-      case 'payment_intent.succeeded':
-        await recordIntent(event.data.object, 'paid');
+      case 'payment_intent.succeeded': {
+        const paymentId = await recordIntent(event.data.object, 'paid');
+        // Best-effort; generateAndSendReceipt swallows its own errors and is
+        // idempotent (skips if a receipt already exists), so Stripe retries
+        // of this same event never re-send the email.
+        if (paymentId) await generateAndSendReceipt(paymentId);
         break;
+      }
       case 'payment_intent.payment_failed':
         // Covers late ACH failures (e.g. R01) that arrive days after settling.
         await recordIntent(event.data.object, 'failed');

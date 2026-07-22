@@ -77,7 +77,7 @@ export default async function TenantRent({
             message="Your rent payment history will appear here."
           />
         ) : (
-          <DataTable columns={['Due', 'Amount', 'Status', 'Paid']}>
+          <DataTable columns={['Due', 'Amount', 'Status', 'Paid', 'Receipt']}>
             {rows.map((p) => (
               <tr key={p.id}>
                 <td className="px-4 py-3">{fmtDate(p.due_date)}</td>
@@ -86,6 +86,18 @@ export default async function TenantRent({
                   <Badge value={p.status} />
                 </td>
                 <td className="px-4 py-3">{fmtDate(p.paid_date)}</td>
+                <td className="px-4 py-3">
+                  {p.receipt_path ? (
+                    <a
+                      href={`/api/receipts/${p.id}`}
+                      className="font-display font-bold text-navy underline"
+                    >
+                      View
+                    </a>
+                  ) : (
+                    <span className="text-ink/50">—</span>
+                  )}
+                </td>
               </tr>
             ))}
           </DataTable>

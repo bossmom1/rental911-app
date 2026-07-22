@@ -105,10 +105,14 @@ export interface RentPayment {
   stripe_checkout_session_id: string | null;
   /** 'ach' | 'card_credit' | 'card_debit' — decides who absorbed the fee. */
   payment_method: string | null;
+  /** Flat 5% of rent, charged when payment is initiated on/after the 6th (due by the 5th). */
+  late_fee_amount: number | null;
   /** Charged to the tenant ON TOP of rent. Always 0 for debit cards. */
   surcharge_amount: number | null;
   /** What the tenant actually paid (rent + surcharge). */
   total_charged: number | null;
+  /** Supabase Storage path in the private "receipts" bucket, e.g. `{lease_id}/{payment_id}.pdf`. */
+  receipt_path: string | null;
   /** Permanently null — Rental911 takes no cut of rent. */
   platform_fee: number | null;
   created_at: string;
