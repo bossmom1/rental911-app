@@ -8,6 +8,7 @@ import { DataTable, EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/Badge';
 import { fmtMoney, fmtDate } from '@/lib/format';
 import { RentPayment } from '@/components/tenant/RentPayment';
+import { RealtimeRefresher } from '@/components/RealtimeRefresher';
 import { quoteRent } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -43,6 +44,11 @@ export default async function TenantRent({
 
   return (
     <>
+      <RealtimeRefresher
+        table="rent_payments"
+        filter={`tenant_id=eq.${current!.authId}`}
+        channelKey={`rent-tenant-${current!.authId}`}
+      />
       <PageHeader title="Rent" subtitle="Pay rent and view your payment history." />
 
       {searchParams?.paid && (

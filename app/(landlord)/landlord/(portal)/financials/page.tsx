@@ -9,6 +9,7 @@ import { DataTable, EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/Badge';
 import { fmtMoney, fmtDate } from '@/lib/format';
 import { fetchPaymentRows, isThisMonth, OUTSTANDING_STATUSES, sumAmount, sumLateFees } from '@/lib/financials';
+import { RealtimeRefresher } from '@/components/RealtimeRefresher';
 
 export const dynamic = 'force-dynamic';
 
@@ -91,6 +92,11 @@ export default async function LandlordFinancials() {
 
   return (
     <>
+      {/* rent_payments has no landlord_id column to filter by directly (only
+          via lease_id -> leases.landlord_id), so this refreshes on ANY
+          payment platform-wide. RLS still governs what the refetch actually
+          returns — this only risks a wasted refresh, never a data leak. */}
+      <RealtimeRefresher table="rent_payments" channelKey={`rent-landlord-${current!.authId}`} />
       <PageHeader title="Financials" subtitle="Rent collected across your properties." />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">

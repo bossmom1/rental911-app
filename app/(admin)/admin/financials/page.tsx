@@ -13,6 +13,7 @@ import {
   sumAmount,
   sumLateFees,
 } from '@/lib/financials';
+import { RealtimeRefresher } from '@/components/RealtimeRefresher';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,6 +67,7 @@ export default async function AdminFinancials() {
 
   return (
     <>
+      <RealtimeRefresher table="rent_payments" channelKey="rent-admin" />
       <PageHeader
         title="Financials"
         subtitle="Platform-wide rent collection. Rental911 takes no cut of rent — there is no platform-fee figure here."

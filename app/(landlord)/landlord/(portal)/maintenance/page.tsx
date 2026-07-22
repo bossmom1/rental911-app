@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PortalShell';
 import { RequestList } from '@/components/maintenance/RequestList';
+import { RealtimeRefresher } from '@/components/RealtimeRefresher';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,11 @@ export default async function LandlordMaintenance() {
 
   return (
     <>
+      <RealtimeRefresher
+        table="maintenance_requests"
+        filter={`landlord_id=eq.${current!.authId}`}
+        channelKey={`maint-list-landlord-${current!.authId}`}
+      />
       <PageHeader
         title="Maintenance"
         subtitle="Requests submitted by your tenants."

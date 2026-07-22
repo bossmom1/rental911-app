@@ -10,7 +10,19 @@ import { requireSupabaseEnv } from '@/lib/supabase-env';
  */
 export function createSupabaseBrowserClient() {
   const { url, anonKey } = requireSupabaseEnv();
-  return createBrowserClient<Database>(url, anonKey);
+  const client = createBrowserClient<Database>(url, anonKey);
+
+  // @supabase/ssr's browser client hydrates its session from cookies
+  // asynchronously, but the Realtime module isn't authenticated with that
+  // session's JWT until explicitly set — without this, every
+  // postgres_changes subscription connects unauthenticated and RLS silently
+  // drops every event (confirmed: raw supabase-js with a signed-in session
+  // receives events fine; this client without it never does).
+  client.auth.onAuthStateChange((_event, session) => {
+    if (session) client.realtime.setAuth(session.access_token);
+  });
+
+  return client;
 }
 
 type CookieStore = ReturnType<typeof cookies>;

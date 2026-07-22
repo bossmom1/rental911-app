@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PortalShell';
 import { RequestDetail } from '@/components/maintenance/RequestDetail';
+import { RealtimeRefresher } from '@/components/RealtimeRefresher';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +38,11 @@ export default async function LandlordMaintenanceDetail({
 
   return (
     <>
+      <RealtimeRefresher
+        table="maintenance_requests"
+        filter={`id=eq.${params.id}`}
+        channelKey={`maint-detail-${params.id}`}
+      />
       <div className="mb-4">
         <Link href="/landlord/maintenance" className="text-navy underline">
           ← Back to maintenance

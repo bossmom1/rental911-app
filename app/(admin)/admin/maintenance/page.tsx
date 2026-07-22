@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase';
 import { PageHeader } from '@/components/ui/PortalShell';
 import { RequestList } from '@/components/maintenance/RequestList';
+import { RealtimeRefresher } from '@/components/RealtimeRefresher';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,7 @@ export default async function AdminMaintenance() {
 
   return (
     <>
+      <RealtimeRefresher table="maintenance_requests" channelKey="maint-list-admin" />
       <PageHeader
         title="Maintenance"
         subtitle="All maintenance requests across the platform."
