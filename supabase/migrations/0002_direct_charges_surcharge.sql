@@ -39,9 +39,15 @@ end $$;
 -- Idempotency moves from the Checkout Session to the PaymentIntent: the direct
 -- charge flow creates PaymentIntents directly, so there is no Session id. Stripe
 -- retries deliveries, so this is what stops duplicate rows.
+--
+-- Must be a plain (non-partial) unique index: the webhook upserts with
+-- ON CONFLICT (stripe_payment_intent_id), and Postgres will only use a partial
+-- index as a conflict arbiter if the ON CONFLICT clause repeats its exact WHERE
+-- predicate — which Supabase's .upsert({ onConflict: '...' }) cannot express.
+-- A plain unique index already permits unlimited NULLs without collision, so
+-- no WHERE clause is needed anyway.
 create unique index if not exists rent_payments_payment_intent_uniq
-  on public.rent_payments (stripe_payment_intent_id)
-  where stripe_payment_intent_id is not null;
+  on public.rent_payments (stripe_payment_intent_id);
 
 -- Superseded by the unique index above; the plain index would be redundant.
 drop index if exists idx_rent_payments_payment_intent;
