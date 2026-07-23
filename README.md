@@ -142,9 +142,39 @@ landlord's rows via the anon client — RLS returns an empty set. Policies live 
 
 ---
 
-## 5. Notes for later phases
+## 5. Phase 3 checklist
+
+| Item | Status |
+|---|---|
+| Vendor management (admin-only): vetting/compliance fields, license + membership status, `/admin/vendors` add/edit/deactivate | ✅ `app/(admin)/admin/vendors/*`, migration `0008` |
+| Starter vendor network seeded (plumbing, electrical, HVAC) | ✅ idempotent seed in migration `0008` |
+| Split dispatch: tenant self-dispatch (Path A) for non-emergency requests | ✅ `TenantDispatchPanel` → `selfDispatchVendor` |
+| Split dispatch: admin-mediated (Path B) for emergency requests | ✅ `AdminDispatchPanel` → `adminDispatchVendor` |
+| Both paths confirmation-based (no accept/decline) | ✅ `vendor_response`: pending/confirmed/no_response |
+| Vendor notified via GHL SMS + email with public confirmation link | ✅ `lib/dispatch.ts`, `lib/ghl.ts` |
+| Public, unauthenticated vendor confirmation page + API | ✅ `/vendor/confirm/[id]`, `/api/vendor-dispatch/[id]/confirm` |
+| Tenant can log the confirmed date once agreed with vendor | ✅ `confirmScheduledDateAsTenant` |
+| AI chat summary generated on close (non-blocking) | ✅ `StatusUpdater` → `/api/maintenance/summarize` (Anthropic) |
+| Tenant post-completion rating (1–5 stars + feedback) | ✅ `RatingPanel` → `rateDispatch`, locks after submit |
+| Vendor stats (jobs dispatched, completion rate, avg rating ≥3 ratings) | ✅ `/admin/vendors`, aggregated from `vendor_dispatches` |
+| Status badges match spec hex exactly (open/in_progress/vendor_assigned/completed/closed) | ✅ verified against live computed styles in production |
+| Live-computed vendor lapsed/overdue checks (no cron in this app) | ✅ `lib/vendors.ts`: `isVendorLapsed`, `isDispatchOverdue` |
+
+### Verifying Phase 3
+Both dispatch paths, the public confirmation endpoint, the rating flow, AI
+summary generation, and badge colors were exercised live under real
+authenticated tenant/admin/landlord browser sessions (not service-role) on
+2026-07-23. Two real bugs surfaced this way and are already fixed and
+redeployed: `fmtDate()` shifted date-only fields (scheduled/due/expiry dates)
+back a day for viewers west of UTC, and `vendor_dispatches.completion_confirmed`
+was never being set, so the vendor completion-rate stat was stuck at 0%
+(fixed in `StatusUpdater`, plus a new landlord update policy in migration
+`0009`).
+
+---
+
+## 6. Notes for later phases
 - **Phase 2** — Stripe Connect Express (onboarding Step 6), tenant ACH/card rent, 2.5% platform fee, webhooks, PDF receipts, admin financials.
-- **Phase 3** — vendor dispatch, Anthropic summary on close (`claude-sonnet-4-6`), tenant rating flow.
 - **Phase 4** — Maryland compliance automation (rental license / lead paint / inspection), P&L + year-end CSV, lease-renewal alerts.
 - **Phase 5** — GHL contact sync + Calendar go-live, real LeaseRunner API, full QA, production deploy.
 
