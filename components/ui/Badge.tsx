@@ -1,10 +1,13 @@
 const palette: Record<string, string> = {
   // maintenance / general status
   open: 'bg-warning-yellow/20 text-yellow-800 border-warning-yellow',
-  in_progress: 'bg-light-blue/40 text-navy border-navy',
-  vendor_assigned: 'bg-light-blue/40 text-navy border-navy',
-  completed: 'bg-green-100 text-green-800 border-green-500',
-  closed: 'bg-gray-100 text-ink border-gray-400',
+  in_progress: 'bg-navy/10 text-navy border-navy',
+  vendor_assigned: 'bg-light-blue/40 text-navy border-light-blue',
+  completed: 'bg-green-100 text-green-800 border-[#16A34A]',
+  closed: 'bg-gray-100 text-ink border-[#6B7280]',
+  // vendor dispatch response
+  confirmed: 'bg-green-100 text-green-800 border-[#16A34A]',
+  no_response: 'bg-red-100 text-red-700 border-red-500',
   // priority
   low: 'bg-gray-100 text-ink border-gray-400',
   medium: 'bg-light-blue/40 text-navy border-navy',

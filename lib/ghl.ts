@@ -163,3 +163,63 @@ export async function bookCalendarEvent(
 /** Public iframe embed URL for the onboarding-call booking widget (Step 8). */
 export const GHL_ONBOARDING_CALENDAR_EMBED =
   process.env.NEXT_PUBLIC_GHL_ONBOARDING_CALENDAR_EMBED || '';
+
+// ---- Conversations (SMS + Email) --------------------------------------------
+
+/** POST /conversations/messages — SMS to a contact. Non-blocking. */
+export async function sendSms(contactId: string, message: string): Promise<boolean> {
+  const { apiKey, configured } = ghlConfig();
+  if (!configured) {
+    console.warn('[ghl] not configured — skipping SMS to', contactId);
+    return false;
+  }
+  try {
+    const res = await fetch(`${GHL_BASE}/conversations/messages`, {
+      method: 'POST',
+      headers: headers(apiKey!),
+      body: JSON.stringify({ type: 'SMS', contactId, message }),
+    });
+    if (!res.ok) throw new Error(`GHL ${res.status}: ${await res.text()}`);
+    return true;
+  } catch (err) {
+    console.error('[ghl] sendSms failed (non-blocking):', err);
+    return false;
+  }
+}
+
+/** POST /conversations/messages — Email to a contact. Non-blocking. */
+export async function sendEmail(
+  contactId: string,
+  subject: string,
+  html: string
+): Promise<boolean> {
+  const { apiKey, configured } = ghlConfig();
+  if (!configured) {
+    console.warn('[ghl] not configured — skipping email to', contactId);
+    return false;
+  }
+  try {
+    const res = await fetch(`${GHL_BASE}/conversations/messages`, {
+      method: 'POST',
+      headers: headers(apiKey!),
+      body: JSON.stringify({ type: 'Email', contactId, subject, html }),
+    });
+    if (!res.ok) throw new Error(`GHL ${res.status}: ${await res.text()}`);
+    return true;
+  } catch (err) {
+    console.error('[ghl] sendEmail failed (non-blocking):', err);
+    return false;
+  }
+}
+
+/** Sends both SMS and email for a vendor dispatch notification. Each is independently non-blocking. */
+export async function sendVendorDispatchNotification(
+  contactId: string,
+  input: { subject: string; smsText: string; emailHtml: string }
+): Promise<{ smsOk: boolean; emailOk: boolean }> {
+  const [smsOk, emailOk] = await Promise.all([
+    sendSms(contactId, input.smsText),
+    sendEmail(contactId, input.subject, input.emailHtml),
+  ]);
+  return { smsOk, emailOk };
+}

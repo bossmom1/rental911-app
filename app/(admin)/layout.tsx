@@ -9,6 +9,7 @@ const NAV: NavItem[] = [
   { label: 'Landlords', href: '/admin/landlords' },
   { label: 'Tenants', href: '/admin/tenants' },
   { label: 'Maintenance', href: '/admin/maintenance' },
+  { label: 'Vendors', href: '/admin/vendors' },
   { label: 'Compliance', href: '/admin/compliance' },
   { label: 'Financials', href: '/admin/financials' },
 ];

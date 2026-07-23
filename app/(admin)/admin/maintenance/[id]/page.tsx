@@ -6,6 +6,8 @@ import { getCurrentUser } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PortalShell';
 import { RequestDetail } from '@/components/maintenance/RequestDetail';
 import { RealtimeRefresher } from '@/components/RealtimeRefresher';
+import { AdminDispatchPanel } from '@/components/maintenance/AdminDispatchPanel';
+import { isDispatchOverdue, isVendorLapsed } from '@/lib/vendors';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,12 +38,37 @@ export default async function AdminMaintenanceDetail({
     ? `${unit.property?.name ?? 'Property'} · Unit ${unit.unit_number ?? '—'}`
     : 'Unit unassigned';
 
+  const { data: rawDispatches } = await supabase
+    .from('vendor_dispatches')
+    .select('*, vendor:vendors(name, phone, avg_response_hours)')
+    .eq('request_id', params.id)
+    .order('dispatched_at', { ascending: false });
+
+  const dispatches = (rawDispatches ?? []).map((d) => ({
+    ...d,
+    vendor: d.vendor ? { name: d.vendor.name, phone: d.vendor.phone } : null,
+    overdue: isDispatchOverdue(d, d.vendor?.avg_response_hours ?? 24),
+  }));
+
+  const { data: rawVendors } = await supabase
+    .from('vendors')
+    .select('id, name, trade, avg_response_hours, active, license_status, next_reverification_due, is_hidden_lapsed')
+    .eq('trade', request.category)
+    .eq('active', true);
+
+  const vendors = (rawVendors ?? []).filter((v) => !isVendorLapsed(v));
+
   return (
     <>
       <RealtimeRefresher
         table="maintenance_requests"
         filter={`id=eq.${params.id}`}
         channelKey={`maint-detail-${params.id}`}
+      />
+      <RealtimeRefresher
+        table="vendor_dispatches"
+        filter={`request_id=eq.${params.id}`}
+        channelKey={`dispatch-admin-${params.id}`}
       />
       <div className="mb-4">
         <Link href="/admin/maintenance" className="text-navy underline">
@@ -58,6 +85,7 @@ export default async function AdminMaintenanceDetail({
         canEditStatus
         showSummary
       />
+      <AdminDispatchPanel requestId={params.id} vendors={vendors} dispatches={dispatches} />
     </>
   );
 }

@@ -142,6 +142,9 @@ export interface MaintenanceChat {
   created_at: string;
 }
 
+export type LicenseStatus = 'active' | 'expired' | 'pending';
+export type MembershipStatus = 'active' | 'expired' | 'pending';
+
 export interface Vendor {
   id: string;
   name: string | null;
@@ -151,7 +154,25 @@ export interface Vendor {
   avg_response_hours: number;
   active: boolean;
   created_at: string;
+  license_number: string | null;
+  license_expiry: string | null;
+  license_status: LicenseStatus | null;
+  insurance_confirmed: boolean;
+  insurance_confirmed_date: string | null;
+  vetted_at: string | null;
+  next_reverification_due: string | null;
+  /** Authoritative for RLS; see lib/vendors.ts for the live-computed check this backs up. */
+  is_hidden_lapsed: boolean;
+  discount_offered: string | null;
+  membership_start_date: string | null;
+  membership_term_months: number;
+  membership_status: MembershipStatus | null;
+  ghl_contact_id: string | null;
 }
+
+export type DispatchType = 'tenant' | 'admin';
+export type VendorResponse = 'pending' | 'confirmed' | 'no_response';
+export type ConfirmedBy = 'tenant' | 'vendor' | 'admin';
 
 export interface VendorDispatch {
   id: string;
@@ -159,10 +180,13 @@ export interface VendorDispatch {
   vendor_id: string | null;
   dispatched_at: string;
   dispatched_by: string | null;
-  vendor_response: string | null;
+  dispatch_type: DispatchType | null;
+  tenant_availability: string | null;
+  vendor_response: VendorResponse | null;
   responded_at: string | null;
   scheduled_date: string | null;
   scheduled_time: string | null;
+  confirmed_by: ConfirmedBy | null;
   completion_confirmed: boolean;
   tenant_rating: number | null;
   tenant_feedback: string | null;
