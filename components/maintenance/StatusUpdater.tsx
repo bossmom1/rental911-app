@@ -47,6 +47,13 @@ export function StatusUpdater({
       return;
     }
 
+    // Job is done — mark any dispatches on this request as completed, so
+    // vendor stats (completion rate) reflect it. Non-blocking: a failure here
+    // shouldn't undo the status change the admin/landlord just made.
+    if (next === 'completed' || next === 'closed') {
+      await supabase.from('vendor_dispatches').update({ completion_confirmed: true }).eq('request_id', requestId);
+    }
+
     // Generate the AI chat summary on close — non-blocking, never blocks the status change.
     if (next === 'closed') {
       fetch('/api/maintenance/summarize', {
