@@ -179,6 +179,13 @@ export function OnboardingWizard({
                     ))}
                   </Select>
                 </Field>
+                <Field
+                  label="Municipality (if incorporated town)"
+                  htmlFor="municipality"
+                  hint="e.g. La Plata, Hyattsville — leave blank if not in an incorporated town"
+                >
+                  <Input id="municipality" name="municipality" />
+                </Field>
                 <Field label="Number of units" htmlFor="unit_count">
                   <Input
                     id="unit_count"

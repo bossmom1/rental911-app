@@ -59,6 +59,7 @@ export interface Property {
   state: string | null;
   zip: string | null;
   county: string | null;
+  municipality: string | null;
   property_type: string | null;
   unit_count: number;
   lead_paint_required: boolean;

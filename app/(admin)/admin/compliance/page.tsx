@@ -4,11 +4,12 @@ import { createSupabaseServerClient } from '@/lib/supabase';
 import { PageHeader } from '@/components/ui/PortalShell';
 import { DataTable, EmptyState } from '@/components/ui/EmptyState';
 import { ComplianceStatusBadge } from '@/components/ui/ComplianceStatusBadge';
+import { SelfLicensedMunicipalityBadge } from '@/components/ui/SelfLicensedMunicipalityBadge';
 import { StatCard } from '@/components/ui/StatCard';
 import { Field, Select } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { fmtDate } from '@/lib/format';
-import { SUPPORTED_COUNTIES } from '@/lib/compliance';
+import { isPgSelfLicensedMunicipality, SUPPORTED_COUNTIES } from '@/lib/compliance';
 import type { ComplianceStatus } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,7 @@ interface PropertyRow {
   id: string;
   name: string | null;
   county: string | null;
+  municipality: string | null;
   compliance_items: ComplianceItemRow[];
 }
 
@@ -56,7 +58,7 @@ export default async function AdminCompliance({
 
   const { data } = await supabase
     .from('properties')
-    .select('id, name, county, compliance_items(type, status, expiry_date, updated_at)')
+    .select('id, name, county, municipality, compliance_items(type, status, expiry_date, updated_at)')
     .order('name', { ascending: true });
 
   const allProperties = (data ?? []) as unknown as PropertyRow[];
@@ -140,7 +142,12 @@ export default async function AdminCompliance({
         >
           {rows.map((p) => {
             const items = p.compliance_items ?? [];
-            const rentalLicense = findItem(items, ['rental_license', 'dpie_rental_license']);
+            const rentalLicense = findItem(items, [
+              'rental_license',
+              'dpie_rental_license',
+              'municipal_rental_license',
+              'town_rental_license',
+            ]);
             const leadPaint = findItem(items, ['lead_paint_cert']);
             const inspection = findItem(items, ['inspection_cert']);
             return (
@@ -150,7 +157,14 @@ export default async function AdminCompliance({
                     {p.name ?? '—'}
                   </Link>
                 </td>
-                <td className="px-4 py-3">{p.county ?? '—'}</td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-col items-start gap-1">
+                    <span>{p.county ?? '—'}</span>
+                    {isPgSelfLicensedMunicipality(p.county, p.municipality) && (
+                      <SelfLicensedMunicipalityBadge />
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col gap-1">
                     <ComplianceStatusBadge value={rentalLicense?.status} />

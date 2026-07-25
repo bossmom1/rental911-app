@@ -5,9 +5,10 @@ import { createSupabaseServerClient } from '@/lib/supabase';
 import { PageHeader } from '@/components/ui/PortalShell';
 import { Card } from '@/components/ui/Card';
 import { ComplianceStatusBadge } from '@/components/ui/ComplianceStatusBadge';
+import { SelfLicensedMunicipalityBadge } from '@/components/ui/SelfLicensedMunicipalityBadge';
 import { Field, Select, Input } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
-import { complianceItemLabel } from '@/lib/compliance';
+import { complianceItemLabel, isPgSelfLicensedMunicipality } from '@/lib/compliance';
 import { fmtDate } from '@/lib/format';
 import type { ComplianceStatus } from '@/types/database';
 import { updateComplianceItemAction } from './actions';
@@ -30,7 +31,7 @@ export default async function AdminCompliancePropertyDetail({
   const supabase = createSupabaseServerClient(cookies());
   const { data: property } = await supabase
     .from('properties')
-    .select('id, name, county, address')
+    .select('id, name, county, municipality, address')
     .eq('id', params.propertyId)
     .maybeSingle();
 
@@ -48,13 +49,19 @@ export default async function AdminCompliancePropertyDetail({
     <>
       <PageHeader
         title={property.name ?? 'Property'}
-        subtitle={`${property.county ?? '—'} County — ${property.address ?? ''}`}
+        subtitle={`${property.county ?? '—'} County${property.municipality ? ` — ${property.municipality}` : ''} — ${property.address ?? ''}`}
         action={
           <Link href="/admin/compliance" className="text-navy underline">
             Back to Compliance
           </Link>
         }
       />
+
+      {isPgSelfLicensedMunicipality(property.county, property.municipality) && (
+        <div className="mb-4">
+          <SelfLicensedMunicipalityBadge />
+        </div>
+      )}
 
       <div className="space-y-4">
         {rows.map((item) => (

@@ -23,6 +23,7 @@ export async function addProperty(formData: FormData): Promise<Result> {
     const me = await landlord();
     const supabase = createSupabaseServerClient(cookies());
     const county = String(formData.get('county') || '');
+    const municipality = String(formData.get('municipality') || '').trim() || null;
     const leadPaintRequired = formData.get('lead_paint_required') === 'on';
     const { data, error } = await supabase
       .from('properties')
@@ -34,6 +35,7 @@ export async function addProperty(formData: FormData): Promise<Result> {
         state: 'MD',
         zip: String(formData.get('zip') || ''),
         county,
+        municipality,
         property_type: String(formData.get('property_type') || ''),
         unit_count: Number(formData.get('unit_count') || 1),
         lead_paint_required: leadPaintRequired,
@@ -41,7 +43,7 @@ export async function addProperty(formData: FormData): Promise<Result> {
       .select('id')
       .single();
     if (error) return { ok: false, error: error.message };
-    await createComplianceItems(supabase, data.id, county, leadPaintRequired);
+    await createComplianceItems(supabase, data.id, county, municipality, leadPaintRequired);
     revalidatePath('/landlord/properties');
     return { ok: true };
   } catch (e) {

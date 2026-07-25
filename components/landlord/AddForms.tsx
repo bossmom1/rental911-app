@@ -74,6 +74,13 @@ export function AddPropertyForm() {
             ))}
           </Select>
         </Field>
+        <Field
+          label="Municipality (if incorporated town)"
+          htmlFor="p_municipality"
+          hint="e.g. La Plata, Hyattsville — leave blank if not in an incorporated town"
+        >
+          <Input id="p_municipality" name="municipality" />
+        </Field>
         <Field label="Units" htmlFor="p_units">
           <Input id="p_units" name="unit_count" type="number" min={1} defaultValue={1} />
         </Field>

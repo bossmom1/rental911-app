@@ -29,6 +29,7 @@ export async function saveProperty(formData: FormData): Promise<ActionResult> {
     const id = await landlordId();
     const unitCount = Number(formData.get('unit_count') || 1);
     const county = String(formData.get('county') || '');
+    const municipality = String(formData.get('municipality') || '').trim() || null;
     const leadPaintRequired = formData.get('lead_paint_required') === 'on';
     const { data, error } = await supabase
       .from('properties')
@@ -40,6 +41,7 @@ export async function saveProperty(formData: FormData): Promise<ActionResult> {
         state: 'MD',
         zip: String(formData.get('zip') || ''),
         county,
+        municipality,
         property_type: String(formData.get('property_type') || ''),
         unit_count: unitCount,
         lead_paint_required: leadPaintRequired,
@@ -47,7 +49,7 @@ export async function saveProperty(formData: FormData): Promise<ActionResult> {
       .select('id')
       .single();
     if (error) return { ok: false, error: error.message };
-    await createComplianceItems(supabase, data.id, county, leadPaintRequired);
+    await createComplianceItems(supabase, data.id, county, municipality, leadPaintRequired);
     await setStep(3);
     return { ok: true, step: 3 };
   } catch (e) {
