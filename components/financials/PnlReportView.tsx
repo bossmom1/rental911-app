@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { fmtMoney } from '@/lib/format';
+import { fmtDate, fmtMoney } from '@/lib/format';
 import type { PnlPeriod, PnlReport } from '@/lib/pnl';
 
 const TABS: { key: PnlPeriod; label: string }[] = [
@@ -11,34 +11,47 @@ const TABS: { key: PnlPeriod; label: string }[] = [
 ];
 
 /**
- * Shared P&L presentation: period toggle, PDF download link, per-property →
- * per-unit breakdown, totals. Used by both the landlord-facing report
- * (/landlord/financials/reports) and the admin per-landlord report
- * (/admin/landlords/[landlordId]/financials/reports) — `basePath` builds the
- * period-tab links and `pdfHref` is the full (already query-stringed) PDF
- * download URL, so the two callers only differ in routing, not rendering.
+ * Shared P&L presentation: period toggle + prev/next navigation, PDF
+ * download link, per-property → per-unit breakdown, totals. Used by both the
+ * landlord-facing report (/landlord/financials/reports) and the admin
+ * per-landlord report (/admin/landlords/[landlordId]/financials/reports) —
+ * `basePath` builds the period-tab/nav links and `pdfHref` is the full
+ * (already query-stringed) PDF download URL, so the two callers only differ
+ * in routing, not rendering.
+ *
+ * `referenceDateParam` is the "YYYY-MM" pointer for whichever period is
+ * currently displayed (see lib/pnl.ts parseReferenceDate/formatReferenceDateParam)
+ * — carried along on tab switches so changing Month/Quarter/Year doesn't
+ * reset back to the current period. `prevHref`/`nextHref` are pre-built by
+ * the caller (via shiftRangeStart) so this component stays presentational.
  */
 export function PnlReportView({
   report,
   period,
   basePath,
+  referenceDateParam,
+  prevHref,
+  nextHref,
   pdfHref,
   emptyMessage = 'The P&L will populate once there are active leases and collected rent.',
 }: {
   report: PnlReport;
   period: PnlPeriod;
   basePath: string;
+  referenceDateParam: string;
+  prevHref: string;
+  nextHref: string;
   pdfHref: string;
   emptyMessage?: string;
 }) {
   return (
     <>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
         <div className="flex gap-2">
           {TABS.map((t) => (
             <Link
               key={t.key}
-              href={`${basePath}?period=${t.key}`}
+              href={`${basePath}?period=${t.key}&date=${referenceDateParam}`}
               className={`rounded-lg px-4 py-2.5 font-display font-bold ${
                 period === t.key ? 'bg-navy text-white' : 'border-2 border-navy text-navy'
               }`}
@@ -55,6 +68,29 @@ export function PnlReportView({
         >
           Download PDF
         </a>
+      </div>
+
+      <div className="mb-6 flex items-center justify-center gap-4">
+        <Link
+          href={prevHref}
+          aria-label="Previous period"
+          className="rounded-lg border-2 border-navy px-3 py-2 font-display font-bold text-navy hover:bg-light-blue/30"
+        >
+          ←
+        </Link>
+        <div className="text-center">
+          <p className="font-display text-lg font-bold text-navy">{report.range.label}</p>
+          <p className="text-ink/60">
+            {fmtDate(report.range.start)} – {fmtDate(report.range.end)}
+          </p>
+        </div>
+        <Link
+          href={nextHref}
+          aria-label="Next period"
+          className="rounded-lg border-2 border-navy px-3 py-2 font-display font-bold text-navy hover:bg-light-blue/30"
+        >
+          →
+        </Link>
       </div>
 
       {report.properties.length === 0 ? (

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Document, Page, View, Text, StyleSheet, renderToBuffer } from '@react-pdf/renderer';
 import { brand } from '@/lib/brand';
+import { fmtDate } from '@/lib/format';
 import type { PnlReport } from '@/lib/pnl';
 
 /** Styling mirrors lib/receipt-pdf.tsx exactly (navy header, gold accent bar, wordmark, bordered table). */
@@ -51,6 +52,11 @@ const styles = StyleSheet.create({
     fontFamily: 'Helvetica-Bold',
     color: brand.navy,
     marginBottom: 4,
+  },
+  dateRange: {
+    fontSize: 11,
+    color: brand.navy,
+    marginBottom: 6,
   },
   meta: {
     fontSize: 10,
@@ -132,6 +138,9 @@ export function PnlDocument({ landlordName, generatedDate, report }: PnlPdfData)
 
         <View style={styles.body}>
           <Text style={styles.title}>{report.range.label}</Text>
+          <Text style={styles.dateRange}>
+            {fmtDate(report.range.start)} – {fmtDate(report.range.end)}
+          </Text>
           <Text style={styles.meta}>
             {landlordName} · Generated {generatedDate}
           </Text>

@@ -2,15 +2,18 @@ import { cookies } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth';
-import { buildPnlReport, parsePeriod } from '@/lib/pnl';
+import { buildPnlReport, parsePeriod, parseReferenceDate } from '@/lib/pnl';
 import { renderPnlPdf } from '@/lib/pnl-pdf';
 import { fmtDate } from '@/lib/format';
 
 /**
- * GET /api/financials/pnl-pdf?period=month|quarter|year[&landlordId=...] —
- * renders the P&L PDF on demand (period is dynamic; unlike receipts this is
- * never pre-stored). RLS-scoped via the caller's own client (admin sees all,
- * landlord sees own).
+ * GET /api/financials/pnl-pdf?period=month|quarter|year[&date=YYYY-MM][&landlordId=...] —
+ * renders the P&L PDF on demand (period/date are dynamic; unlike receipts
+ * this is never pre-stored). RLS-scoped via the caller's own client (admin
+ * sees all, landlord sees own). `date` matches whatever period the on-screen
+ * report is currently showing (see PnlReportView's pdfHref), so a downloaded
+ * PDF always reflects the period the user was actually looking at, not
+ * always "now".
  *
  * `landlordId` is honored ONLY for admin callers (see
  * /admin/landlords/[landlordId]/financials/reports) — a landlord's own RLS
@@ -24,6 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   const period = parsePeriod(request.nextUrl.searchParams.get('period'));
+  const referenceDate = parseReferenceDate(request.nextUrl.searchParams.get('date'));
   const supabase = createSupabaseServerClient(cookies());
 
   const requestedLandlordId =
@@ -45,7 +49,7 @@ export async function GET(request: NextRequest) {
     landlordName = landlord.full_name || landlord.email;
   }
 
-  const report = await buildPnlReport(supabase, period, new Date(), requestedLandlordId);
+  const report = await buildPnlReport(supabase, period, referenceDate, requestedLandlordId);
 
   const pdfBuffer = await renderPnlPdf({
     landlordName,
@@ -57,7 +61,7 @@ export async function GET(request: NextRequest) {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="rental911-pnl-${period}.pdf"`,
+      'Content-Disposition': `inline; filename="rental911-pnl-${period}-${report.range.start}.pdf"`,
     },
   });
 }

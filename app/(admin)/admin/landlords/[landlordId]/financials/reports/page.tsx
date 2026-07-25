@@ -4,7 +4,13 @@ import { notFound } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase';
 import { PageHeader } from '@/components/ui/PortalShell';
 import { PnlReportView } from '@/components/financials/PnlReportView';
-import { buildPnlReport, parsePeriod } from '@/lib/pnl';
+import {
+  buildPnlReport,
+  formatReferenceDateParam,
+  parsePeriod,
+  parseReferenceDate,
+  shiftRangeStart,
+} from '@/lib/pnl';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +28,7 @@ export default async function AdminLandlordPnlReports({
   searchParams,
 }: {
   params: { landlordId: string };
-  searchParams: { period?: string };
+  searchParams: { period?: string; date?: string };
 }) {
   const supabase = createSupabaseServerClient(cookies());
 
@@ -35,7 +41,13 @@ export default async function AdminLandlordPnlReports({
   if (!landlord) notFound();
 
   const period = parsePeriod(searchParams.period);
-  const report = await buildPnlReport(supabase, period, new Date(), landlord.id);
+  const referenceDate = parseReferenceDate(searchParams.date);
+  const referenceDateParam = formatReferenceDateParam(referenceDate);
+  const report = await buildPnlReport(supabase, period, referenceDate, landlord.id);
+
+  const basePath = `/admin/landlords/${landlord.id}/financials/reports`;
+  const prevDateParam = formatReferenceDateParam(shiftRangeStart(report.range, -1));
+  const nextDateParam = formatReferenceDateParam(shiftRangeStart(report.range, 1));
 
   return (
     <>
@@ -51,8 +63,11 @@ export default async function AdminLandlordPnlReports({
       <PnlReportView
         report={report}
         period={period}
-        basePath={`/admin/landlords/${landlord.id}/financials/reports`}
-        pdfHref={`/api/financials/pnl-pdf?period=${period}&landlordId=${landlord.id}`}
+        basePath={basePath}
+        referenceDateParam={referenceDateParam}
+        prevHref={`${basePath}?period=${period}&date=${prevDateParam}`}
+        nextHref={`${basePath}?period=${period}&date=${nextDateParam}`}
+        pdfHref={`/api/financials/pnl-pdf?period=${period}&date=${referenceDateParam}&landlordId=${landlord.id}`}
         emptyMessage="This landlord's P&L will populate once they have active leases and collected rent."
       />
     </>

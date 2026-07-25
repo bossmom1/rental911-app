@@ -20,6 +20,48 @@ export function parsePeriod(value: string | null | undefined): PnlPeriod {
   return value === 'quarter' || value === 'year' ? value : 'month';
 }
 
+/**
+ * Parses a `date` query/search param (accepts "YYYY-MM" or "YYYY-MM-DD") into
+ * the first of that month, UTC — this is the "which period are we looking
+ * at" pointer threaded through prev/next navigation and tab switches.
+ * Defaults to the current month for anything missing/malformed.
+ */
+export function parseReferenceDate(value: string | null | undefined): Date {
+  if (value) {
+    const match = /^(\d{4})-(\d{2})(?:-\d{2})?$/.exec(value);
+    if (match) {
+      const y = Number(match[1]);
+      const m = Number(match[2]);
+      if (m >= 1 && m <= 12) return new Date(Date.UTC(y, m - 1, 1));
+    }
+  }
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
+
+/** Inverse of parseReferenceDate — "YYYY-MM" for building nav/tab URLs. */
+export function formatReferenceDateParam(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * The reference date for the adjacent period (prev/next), derived from an
+ * already-computed PeriodRange rather than re-deriving period-type-specific
+ * month math — shifting `range.start` by ±monthsInPeriod always lands
+ * correctly whether the range is a month, a quarter, or a year.
+ */
+export function shiftRangeStart(range: PeriodRange, direction: 1 | -1): Date {
+  const [y, m] = range.start.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1 + range.monthsInPeriod * direction, 1));
+}
+
+function monthAbbrev(monthIndex0: number): string {
+  return new Date(Date.UTC(2000, monthIndex0, 1)).toLocaleDateString('en-US', {
+    month: 'short',
+    timeZone: 'UTC',
+  });
+}
+
 /** UTC-based period boundaries (avoids the local-timezone off-by-one that plain `date` columns are prone to, see lib/format.ts). */
 export function periodRange(period: PnlPeriod, referenceDate: Date): PeriodRange {
   const y = referenceDate.getUTCFullYear();
@@ -36,7 +78,7 @@ export function periodRange(period: PnlPeriod, referenceDate: Date): PeriodRange
       start: toDateStr(y, qStartMonth, 1),
       end: toDateStr(lastDay.getUTCFullYear(), lastDay.getUTCMonth(), lastDay.getUTCDate()),
       monthsInPeriod: 3,
-      label: `Q${Math.floor(qStartMonth / 3) + 1} ${y}`,
+      label: `Q${Math.floor(qStartMonth / 3) + 1} ${y} (${monthAbbrev(qStartMonth)}–${monthAbbrev(qStartMonth + 2)})`,
     };
   }
 
