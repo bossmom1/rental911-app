@@ -77,6 +77,19 @@ export function cardSurchargeCents(
 }
 
 /**
+ * The Stripe processing fee for a debit-card payment, in full — since debit
+ * carries no surcharge (see above), this entire amount comes out of the
+ * landlord's payout rather than being recovered from the tenant. This is a
+ * real cost landlords absorb; it is NOT a Rental911 platform fee (Rental911
+ * takes no cut of rent — see the file header note). Canonical home for this
+ * math: reused by the P&L report (lib/pnl.ts), the year-end tax export, and
+ * the landlord financials page's Monthly P&L card.
+ */
+export function debitCardFeeCents(rentCents: number): number {
+  return Math.round(rentCents * CARD_FEE_PERCENT) + CARD_FEE_FIXED_CENTS;
+}
+
+/**
  * Late fees. Rent is due by the 5th of the month; a payment initiated on the
  * 6th or later gets a flat 5% late fee (Maryland's statutory cap). Applies to
  * every lease under the same rule for now — no per-lease custom terms yet.

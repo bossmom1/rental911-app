@@ -85,8 +85,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E5E5',
   },
-  colUnit: { width: '25%', fontSize: 10 },
-  colNum: { width: '18.75%', fontSize: 10, textAlign: 'right' },
+  colUnit: { width: '20%', fontSize: 10 },
+  colNum: { width: '16%', fontSize: 9, textAlign: 'right' },
   headerLabel: { fontFamily: 'Helvetica-Bold', color: brand.navy },
   totalRow: {
     flexDirection: 'row',
@@ -96,14 +96,14 @@ const styles = StyleSheet.create({
     borderTopColor: brand.navy,
   },
   totalLabel: {
-    width: '25%',
+    width: '20%',
     fontSize: 12,
     fontFamily: 'Helvetica-Bold',
     color: brand.navy,
   },
   totalValue: {
-    width: '18.75%',
-    fontSize: 12,
+    width: '16%',
+    fontSize: 11,
     fontFamily: 'Helvetica-Bold',
     color: brand.navy,
     textAlign: 'right',
@@ -153,6 +153,7 @@ export function PnlDocument({ landlordName, generatedDate, report }: PnlPdfData)
                 <Text style={[styles.colNum, styles.headerLabel]}>Rent Due</Text>
                 <Text style={[styles.colNum, styles.headerLabel]}>Collected</Text>
                 <Text style={[styles.colNum, styles.headerLabel]}>Outstanding</Text>
+                <Text style={[styles.colNum, styles.headerLabel]}>Debit Card Fee</Text>
                 <Text style={[styles.colNum, styles.headerLabel]}>Net</Text>
               </View>
               {p.units.map((u) => (
@@ -161,6 +162,7 @@ export function PnlDocument({ landlordName, generatedDate, report }: PnlPdfData)
                   <Text style={styles.colNum}>{money(u.rentDue)}</Text>
                   <Text style={styles.colNum}>{money(u.rentCollected)}</Text>
                   <Text style={styles.colNum}>{money(u.outstanding)}</Text>
+                  <Text style={styles.colNum}>{money(u.debitCardFee)}</Text>
                   <Text style={styles.colNum}>{money(u.netToLandlord)}</Text>
                 </View>
               ))}
@@ -169,6 +171,7 @@ export function PnlDocument({ landlordName, generatedDate, report }: PnlPdfData)
                 <Text style={styles.totalValue}>{money(p.rentDue)}</Text>
                 <Text style={styles.totalValue}>{money(p.rentCollected)}</Text>
                 <Text style={styles.totalValue}>{money(p.outstanding)}</Text>
+                <Text style={styles.totalValue}>{money(p.debitCardFee)}</Text>
                 <Text style={styles.totalValue}>{money(p.netToLandlord)}</Text>
               </View>
             </View>
@@ -179,12 +182,16 @@ export function PnlDocument({ landlordName, generatedDate, report }: PnlPdfData)
             <Text style={styles.totalValue}>{money(report.totals.rentDue)}</Text>
             <Text style={styles.totalValue}>{money(report.totals.rentCollected)}</Text>
             <Text style={styles.totalValue}>{money(report.totals.outstanding)}</Text>
+            <Text style={styles.totalValue}>{money(report.totals.debitCardFee)}</Text>
             <Text style={styles.totalValue}>{money(report.totals.netToLandlord)}</Text>
           </View>
         </View>
 
         <Text style={styles.footer}>
-          Rental911 · Net to Landlord reflects rent collected (Rental911 takes no platform fee from rent).
+          Rental911 · Net to Landlord = Rent Collected − Debit Card Processing Fee. The debit card fee
+          is Stripe's processing cost on debit-card rent payments (no tenant surcharge applies to
+          debit); it is a landlord-side cost, not a Rental911 platform fee — Rental911 takes no cut of
+          rent.
         </Text>
       </Page>
     </Document>

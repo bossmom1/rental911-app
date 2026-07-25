@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth';
-import { getStripe, achSurchargeCents, creditSurchargeCents } from '@/lib/stripe';
+import { getStripe, achSurchargeCents, creditSurchargeCents, debitCardFeeCents } from '@/lib/stripe';
 import { PageHeader } from '@/components/ui/PortalShell';
 import { StatCard } from '@/components/ui/StatCard';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -29,7 +29,7 @@ function estimatedFeeCents(amountDollars: number, surchargeDollars: number, meth
     return Math.max(0, trueFee - surchargeCents);
   }
   if (method === 'card_debit') {
-    return Math.round(rentCents * 0.029) + 30;
+    return debitCardFeeCents(rentCents);
   }
   return 0;
 }

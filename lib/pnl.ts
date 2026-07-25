@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
 import { fetchPaymentRows, fetchActiveLeaseRents } from '@/lib/financials';
+import { debitCardFeeCents } from '@/lib/stripe';
 
 export type PnlPeriod = 'month' | 'quarter' | 'year';
 
@@ -97,6 +98,7 @@ export interface PnlUnitRow {
   rentDue: number;
   rentCollected: number;
   outstanding: number;
+  debitCardFee: number;
   netToLandlord: number;
 }
 
@@ -107,6 +109,15 @@ export interface PnlPropertyRow {
   rentDue: number;
   rentCollected: number;
   outstanding: number;
+  debitCardFee: number;
+  netToLandlord: number;
+}
+
+export interface PnlTotals {
+  rentDue: number;
+  rentCollected: number;
+  outstanding: number;
+  debitCardFee: number;
   netToLandlord: number;
 }
 
@@ -114,7 +125,7 @@ export interface PnlReport {
   period: PnlPeriod;
   range: PeriodRange;
   properties: PnlPropertyRow[];
-  totals: { rentDue: number; rentCollected: number; outstanding: number; netToLandlord: number };
+  totals: PnlTotals;
 }
 
 /**
@@ -129,11 +140,19 @@ export interface PnlReport {
  *
  * Rent Due comes from active leases' monthly_rent × months-in-period — it
  * cannot be derived from rent_payments (which only records what was actually
- * charged). Net to Landlord equals Rent Collected: rent_payments.amount
- * already excludes the tenant-side surcharge passthrough (tracked separately
- * as surcharge_amount/total_charged), and Rental911 takes no platform fee
- * from rent (see migration 0002 / "Remove the platform fee from rent
- * payments"), so there's nothing further to subtract.
+ * charged).
+ *
+ * Net to Landlord = Rent Collected − Debit Card Processing Fee. Rent
+ * Collected (rent_payments.amount) already excludes the tenant-side
+ * surcharge passthrough for ACH/credit (tracked separately as
+ * surcharge_amount/total_charged) — those methods' surcharges cover Stripe's
+ * fee, so the landlord nets the full rent. Debit cards carry NO surcharge
+ * (illegal under card network rules + Durbin, see lib/stripe.ts), so 100% of
+ * Stripe's processing fee on a debit payment comes out of the landlord's
+ * payout instead — that's what the Debit Card Processing Fee line reconciles.
+ * This is a real landlord-side cost, not a Rental911 platform fee (Rental911
+ * takes no cut of rent — see migration 0002 / "Remove the platform fee from
+ * rent payments"); there is nothing else to subtract.
  */
 export async function buildPnlReport(
   supabase: SupabaseClient<Database>,
@@ -163,6 +182,7 @@ export async function buildPnlReport(
         rentDue: 0,
         rentCollected: 0,
         outstanding: 0,
+        debitCardFee: 0,
         netToLandlord: 0,
       };
       byProperty.set(id, prop);
@@ -173,7 +193,15 @@ export async function buildPnlReport(
   function getUnit(prop: PnlPropertyRow, unitId: string, unitNumber: string | null): PnlUnitRow {
     let unit = prop.units.find((u) => u.unitId === unitId);
     if (!unit) {
-      unit = { unitId, unitNumber, rentDue: 0, rentCollected: 0, outstanding: 0, netToLandlord: 0 };
+      unit = {
+        unitId,
+        unitNumber,
+        rentDue: 0,
+        rentCollected: 0,
+        outstanding: 0,
+        debitCardFee: 0,
+        netToLandlord: 0,
+      };
       prop.units.push(unit);
     }
     return unit;
@@ -193,19 +221,24 @@ export async function buildPnlReport(
     if (!r.property_id) continue;
     const prop = getProperty(r.property_id, r.property_name ?? 'Property');
     const collected = Number(r.amount ?? 0);
+    const debitFee =
+      r.payment_method === 'card_debit' ? debitCardFeeCents(Math.round(collected * 100)) / 100 : 0;
     prop.rentCollected += collected;
+    prop.debitCardFee += debitFee;
     if (r.unit_id) {
-      getUnit(prop, r.unit_id, r.unit_number).rentCollected += collected;
+      const unit = getUnit(prop, r.unit_id, r.unit_number);
+      unit.rentCollected += collected;
+      unit.debitCardFee += debitFee;
     }
   }
 
   const properties = Array.from(byProperty.values())
     .map((p) => {
       p.outstanding = p.rentDue - p.rentCollected;
-      p.netToLandlord = p.rentCollected;
+      p.netToLandlord = p.rentCollected - p.debitCardFee;
       for (const u of p.units) {
         u.outstanding = u.rentDue - u.rentCollected;
-        u.netToLandlord = u.rentCollected;
+        u.netToLandlord = u.rentCollected - u.debitCardFee;
       }
       p.units.sort((a, b) => (a.unitNumber ?? '').localeCompare(b.unitNumber ?? ''));
       return p;
@@ -217,9 +250,10 @@ export async function buildPnlReport(
       rentDue: acc.rentDue + p.rentDue,
       rentCollected: acc.rentCollected + p.rentCollected,
       outstanding: acc.outstanding + p.outstanding,
+      debitCardFee: acc.debitCardFee + p.debitCardFee,
       netToLandlord: acc.netToLandlord + p.netToLandlord,
     }),
-    { rentDue: 0, rentCollected: 0, outstanding: 0, netToLandlord: 0 }
+    { rentDue: 0, rentCollected: 0, outstanding: 0, debitCardFee: 0, netToLandlord: 0 }
   );
 
   return { period, range, properties, totals };

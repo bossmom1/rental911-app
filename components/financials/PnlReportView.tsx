@@ -101,7 +101,7 @@ export function PnlReportView({
             <Card key={p.propertyId}>
               <CardHeader
                 title={p.propertyName}
-                subtitle={`Rent Due ${fmtMoney(p.rentDue)} · Collected ${fmtMoney(p.rentCollected)} · Outstanding ${fmtMoney(p.outstanding)} · Net ${fmtMoney(p.netToLandlord)}`}
+                subtitle={`Rent Due ${fmtMoney(p.rentDue)} · Collected ${fmtMoney(p.rentCollected)} · Outstanding ${fmtMoney(p.outstanding)} · Debit Card Fee ${fmtMoney(p.debitCardFee)} · Net ${fmtMoney(p.netToLandlord)}`}
               />
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
@@ -111,6 +111,7 @@ export function PnlReportView({
                       <th className="px-3 py-2 font-display font-bold text-navy">Rent Due</th>
                       <th className="px-3 py-2 font-display font-bold text-navy">Collected</th>
                       <th className="px-3 py-2 font-display font-bold text-navy">Outstanding</th>
+                      <th className="px-3 py-2 font-display font-bold text-navy">Debit Card Processing Fee</th>
                       <th className="px-3 py-2 font-display font-bold text-navy">Net</th>
                     </tr>
                   </thead>
@@ -121,6 +122,7 @@ export function PnlReportView({
                         <td className="px-3 py-2">{fmtMoney(u.rentDue)}</td>
                         <td className="px-3 py-2">{fmtMoney(u.rentCollected)}</td>
                         <td className="px-3 py-2">{fmtMoney(u.outstanding)}</td>
+                        <td className="px-3 py-2">{fmtMoney(u.debitCardFee)}</td>
                         <td className="px-3 py-2">{fmtMoney(u.netToLandlord)}</td>
                       </tr>
                     ))}
@@ -131,7 +133,7 @@ export function PnlReportView({
           ))}
 
           <Card className="bg-light-blue/10">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               <div>
                 <p className="text-ink/60">Rent Due</p>
                 <p className="font-display text-xl font-bold text-navy">{fmtMoney(report.totals.rentDue)}</p>
@@ -145,10 +147,20 @@ export function PnlReportView({
                 <p className="font-display text-xl font-bold text-navy">{fmtMoney(report.totals.outstanding)}</p>
               </div>
               <div>
+                <p className="text-ink/60">Debit Card Processing Fee</p>
+                <p className="font-display text-xl font-bold text-navy">{fmtMoney(report.totals.debitCardFee)}</p>
+              </div>
+              <div>
                 <p className="text-ink/60">Net to Landlord</p>
                 <p className="font-display text-xl font-bold text-navy">{fmtMoney(report.totals.netToLandlord)}</p>
               </div>
             </div>
+            <p className="mt-4 text-ink/60">
+              Net to Landlord = Rent Collected − Debit Card Processing Fee. This fee is what Stripe
+              charges on debit-card rent payments — debit cards carry no tenant surcharge, so the fee
+              comes out of your payout instead. It is not a Rental911 platform fee; Rental911 takes no
+              cut of rent.
+            </p>
           </Card>
         </div>
       )}
