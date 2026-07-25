@@ -36,10 +36,17 @@ export const SUPPORTED_COUNTIES = [
 export const CHARLES_TOWN_LICENSE_MUNICIPALITIES = ['La Plata', 'Indian Head'];
 
 /**
- * Prince George's County's 17 self-licensing municipalities — towns that run
+ * St. Mary's County's one incorporated town. St. Mary's City is an
+ * unincorporated census-designated place with no town government of its
+ * own, so it cannot have any municipal requirement.
+ */
+export const LEONARDTOWN = 'Leonardtown';
+
+/**
+ * Prince George's County's 18 self-licensing municipalities — towns that run
  * their own rental licensing program instead of going through the county's
- * DPIE license. (Note: the list as given enumerates 18 names; kept verbatim
- * rather than silently dropping one — worth confirming the exact roster.)
+ * DPIE license. Confirmed against DPIE's own Single-Family Rental Licensing
+ * page (2026-07-25).
  */
 export const PG_SELF_LICENSED_MUNICIPALITIES = [
   'Berwyn Heights',
@@ -91,6 +98,10 @@ function isCharlesTownWithLicense(municipality: string | null | undefined): bool
   return municipalityIn(municipality, CHARLES_TOWN_LICENSE_MUNICIPALITIES);
 }
 
+function isLeonardtown(municipality: string | null | undefined): boolean {
+  return municipalityIn(municipality, [LEONARDTOWN]);
+}
+
 interface ComplianceItemDraft {
   type: string;
   status: 'not_on_file';
@@ -111,6 +122,7 @@ export const COMPLIANCE_ITEM_LABELS: Record<string, string> = {
   county_registration: 'County Rental Registration',
   tenant_bill_of_rights: 'Tenant Bill of Rights Acknowledgment',
   minimum_livability_code: 'Meets Minimum Livability Code',
+  leonardtown_livability_standards: 'Meets Livability Standards',
 };
 
 export function complianceItemLabel(type: string | null | undefined): string {
@@ -126,10 +138,16 @@ export function complianceItemLabel(type: string | null | undefined): string {
  *  - Charles: no county-level license (the county doesn't require one).
  *    Only La Plata / Indian Head properties get a Town Rental License; any
  *    other municipality (or none) gets no license item until researched.
- *  - St. Mary's: rental_license (confirmed county requirement). No separate
- *    county-registration item — no confirmed requirement for one exists.
+ *  - St. Mary's: no license or registration item — no confirmed requirement
+ *    exists at the county level (Maryland People's Law Library) or in
+ *    Leonardtown, the county's one incorporated town (Leonardtown's own
+ *    "Livability Standards and Property Maintenance" code is a
+ *    compliance/inspection model, not licensing — St. Mary's City has no
+ *    town government of its own and so has no municipal requirement
+ *    either). Leonardtown properties instead get a "Meets Livability
+ *    Standards" item; everywhere else in the county gets neither.
  *  - Prince George's: DPIE Rental License, UNLESS the property is in one of
- *    the 17 self-licensing towns, which get a Municipal Rental License
+ *    the 18 self-licensing towns, which get a Municipal Rental License
  *    instead (never both). Tenant Bill of Rights applies regardless.
  *  - Calvert: no license — Chapter 75 (Minimum Livability Code) uses an
  *    inspection/citation model, not upfront licensing — instead gets a
@@ -150,7 +168,9 @@ function buildChecklist(
   const items: ComplianceItemDraft[] = [{ type: 'inspection_cert', status: 'not_on_file' }];
 
   if (county === ST_MARYS_COUNTY) {
-    items.push({ type: 'rental_license', status: 'not_on_file' });
+    if (isLeonardtown(municipality)) {
+      items.push({ type: 'leonardtown_livability_standards', status: 'not_on_file' });
+    }
   } else if (county === PRINCE_GEORGES_COUNTY) {
     if (isPgSelfLicensedMunicipality(county, municipality)) {
       items.push({ type: 'municipal_rental_license', status: 'not_on_file' });
