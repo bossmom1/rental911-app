@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/cron/compliance-check", "schedule": "0 13 * * *" },
+    { "path": "/api/cron/lease-renewal-check", "schedule": "15 13 * * *" }
+  ]
+}

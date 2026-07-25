@@ -62,3 +62,76 @@ export async function sendReceiptEmail(input: ReceiptEmailInput): Promise<boolea
     return false;
   }
 }
+
+export const ALERTS_FROM_EMAIL =
+  process.env.ALERTS_FROM_EMAIL || 'alerts@rental911.net';
+
+export interface ComplianceAlertEmailInput {
+  to: string[];
+  propertyName: string;
+  itemLabel: string; // human-readable compliance item type, e.g. "Rental License"
+  expiryDate: string; // pre-formatted date string
+}
+
+/** Sent by the daily compliance cron when an item flips to expiring_soon. */
+export async function sendComplianceAlertEmail(
+  input: ComplianceAlertEmailInput
+): Promise<boolean> {
+  const resend = getResend();
+  if (!resend) {
+    console.warn('[email] RESEND_API_KEY not set — skipping compliance alert email');
+    return false;
+  }
+  try {
+    const { error } = await resend.emails.send({
+      from: ALERTS_FROM_EMAIL,
+      to: input.to,
+      subject: `${input.propertyName} — ${input.itemLabel} expires soon`,
+      html: `
+        <p>${input.propertyName} — Your ${input.itemLabel} expires on ${input.expiryDate}.</p>
+        <p>Upload your renewal now to stay compliant.</p>
+        <p>— Rental911</p>
+      `,
+    });
+    if (error) throw new Error(error.message);
+    return true;
+  } catch (err) {
+    console.error('[email] sendComplianceAlertEmail failed (non-blocking):', err);
+    return false;
+  }
+}
+
+export interface LeaseRenewalAlertEmailInput {
+  to: string[];
+  tenantName: string;
+  unitLabel: string; // e.g. "123 Main St, Unit 2"
+  endDate: string; // pre-formatted date string
+}
+
+/** Sent by the daily lease-renewal cron 60 days before a lease's end_date. */
+export async function sendLeaseRenewalAlertEmail(
+  input: LeaseRenewalAlertEmailInput
+): Promise<boolean> {
+  const resend = getResend();
+  if (!resend) {
+    console.warn('[email] RESEND_API_KEY not set — skipping lease renewal alert email');
+    return false;
+  }
+  try {
+    const { error } = await resend.emails.send({
+      from: ALERTS_FROM_EMAIL,
+      to: input.to,
+      subject: `Lease ending soon — ${input.unitLabel}`,
+      html: `
+        <p>Heads up — ${input.tenantName}'s lease at ${input.unitLabel} ends on ${input.endDate}.</p>
+        <p>Time to decide: renew, go month-to-month, or begin turnover.</p>
+        <p>— Rental911</p>
+      `,
+    });
+    if (error) throw new Error(error.message);
+    return true;
+  } catch (err) {
+    console.error('[email] sendLeaseRenewalAlertEmail failed (non-blocking):', err);
+    return false;
+  }
+}

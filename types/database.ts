@@ -29,6 +29,7 @@ export type ComplianceStatus =
   | 'expiring_soon'
   | 'expired'
   | 'not_on_file';
+export type LeaseRenewalStatus = 'draft_review' | 'sent_to_tenant' | 'signed' | 'cancelled';
 
 export interface User {
   id: string;
@@ -88,6 +89,8 @@ export interface Lease {
   security_deposit: number | null;
   status: LeaseStatus | null;
   renewal_alert_sent: boolean;
+  is_month_to_month: boolean;
+  month_to_month_note: string | null;
   created_at: string;
 }
 
@@ -213,6 +216,34 @@ export interface ComplianceItem {
   alert_sent: boolean;
   notes: string | null;
   created_at: string;
+  updated_at: string;
+}
+
+export interface LeaseRenewal {
+  id: string;
+  lease_id: string | null;
+  landlord_id: string | null;
+  new_end_date: string | null;
+  new_monthly_rent: number | null;
+  status: LeaseRenewalStatus | null;
+  sent_to_tenant_at: string | null;
+  signed_at: string | null;
+  new_lease_id: string | null;
+  created_at: string;
+}
+
+export interface MoveOutChecklist {
+  id: string;
+  lease_id: string | null;
+  unit_id: string | null;
+  landlord_id: string | null;
+  keys_returned: boolean;
+  walkthrough_completed: boolean;
+  deposit_disposition_sent: boolean;
+  unit_ready_for_relist: boolean;
+  notes: string | null;
+  created_at: string;
+  completed_at: string | null;
 }
 
 /**
@@ -244,11 +275,18 @@ export interface Database {
       vendor_dispatches: Table<VendorDispatch, Partial<VendorDispatch> & { request_id: string }>;
       documents: Table<DocumentRecord>;
       compliance_items: Table<ComplianceItem>;
+      lease_renewals: Table<LeaseRenewal>;
+      move_out_checklists: Table<MoveOutChecklist>;
     };
     // NOTE: must be `{ [_ in never]: never }`, NOT `Record<string, never>`.
     // A string index signature here poisons `.from()` (Tables & Views) to `never`.
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      flip_compliance_statuses: {
+        Args: Record<string, never>;
+        Returns: ComplianceItem[];
+      };
+    };
     Enums: { [_ in never]: never };
     CompositeTypes: { [_ in never]: never };
   };

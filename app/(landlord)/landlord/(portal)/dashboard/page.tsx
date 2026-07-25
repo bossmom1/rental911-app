@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/ui/PortalShell';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { LinkButton } from '@/components/ui/Button';
 import { RequestList } from '@/components/maintenance/RequestList';
+import { AlertBanners } from '@/components/landlord/AlertBanners';
 import { fmtMoney, fmtPct } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
@@ -65,6 +66,8 @@ export default async function LandlordDashboard() {
         title="Landlord Dashboard"
         subtitle="Your properties, tenants, and maintenance at a glance."
       />
+
+      <AlertBanners />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard tone="navy" label="Properties" value={propIds.length} />

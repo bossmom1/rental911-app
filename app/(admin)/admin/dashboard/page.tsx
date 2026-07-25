@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabase';
 import { StatCard } from '@/components/ui/StatCard';
 import { PageHeader } from '@/components/ui/PortalShell';
@@ -115,12 +116,14 @@ export default async function AdminDashboard() {
           value={pendingMaint.count ?? 0}
           sublabel="open / in progress"
         />
-        <StatCard
-          tone="red"
-          label="Compliance Expiring ≤ 30 days"
-          value={expiringCompliance.count ?? 0}
-          sublabel="needs attention"
-        />
+        <Link href="/admin/compliance" className="block rounded-xl focus:outline-none focus:ring-2 focus:ring-navy">
+          <StatCard
+            tone="red"
+            label="Compliance Items Expiring Within 30 Days"
+            value={expiringCompliance.count ?? 0}
+            sublabel="needs attention"
+          />
+        </Link>
       </div>
 
       <div className="mt-8">

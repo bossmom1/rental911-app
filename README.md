@@ -48,11 +48,14 @@ cp .env.example .env.local
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_SUMMARY_MODEL` | – | Maintenance chat summaries on close (Phase 3) |
 | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `PLATFORM_FEE_PERCENT` | – | Rent collection (Phase 2) |
 | `LEASERUNNER_API_KEY`, `LEASERUNNER_API_BASE` | – | Tenant screening (Phase 5, mocked) |
+| `RESEND_API_KEY`, `RECEIPT_FROM_EMAIL`, `ALERTS_FROM_EMAIL` | – | Transactional email — receipts (Phase 2), compliance + lease renewal alerts (Phase 4) |
+| `CRON_SECRET` | – | Verifies Vercel Cron requests to `/api/cron/*` (Phase 4) |
 
 ### Database
 In the Supabase SQL Editor, run in order:
 1. `supabase/schema.sql` — tables, indexes, the `handle_new_user` auth trigger, RLS helpers, and all RLS policies.
-2. `supabase/seed.sql` — test accounts + sample vendor (see the header comment for creating the Auth users first).
+2. Everything in `supabase/migrations/`, in filename order (`0001_...` through the highest-numbered file) — each is idempotent (safe to re-run).
+3. `supabase/seed.sql` — test accounts + sample vendor (see the header comment for creating the Auth users first).
 
 ### Storage
 Create a Storage bucket named **`documents`** (used by landlord + tenant uploads).
@@ -98,17 +101,20 @@ which also lets `middleware.ts` guard by role:
 app/
   (auth)/login, signup            auth pages + /auth/callback
   (admin)/admin/...               dashboard, properties, landlords, tenants,
-                                  maintenance/[id], compliance, financials
+                                  maintenance/[id], compliance/[propertyId], financials
   (landlord)/landlord/
     onboarding/                   8-step wizard (own full-screen layout)
-    (portal)/...                  dashboard, properties, tenants,
-                                  maintenance/[id], financials (sidebar + banner)
+    (portal)/...                  dashboard, properties, tenants/[leaseId],
+                                  maintenance/[id], financials, financials/{reports,export}
   (tenant)/tenant/...             dashboard, rent, maintenance/new/[id], documents
   api/                            stripe/{webhook,connect}, maintenance/summarize,
-                                  ghl/{sync-contact,calendar}, leaserunner/screen
+                                  ghl/{sync-contact,calendar}, leaserunner/screen,
+                                  cron/{compliance-check,lease-renewal-check},
+                                  financials/{pnl-pdf,tax-export}, lease-renewals/[id]/pdf
 components/ ui · admin · landlord · tenant · maintenance
-lib/       supabase · stripe · anthropic · ghl · auth · routes · brand · format
-types/database.ts · middleware.ts · supabase/{schema,seed}.sql
+lib/       supabase · stripe · anthropic · ghl · auth · routes · brand · format ·
+           compliance · esignature · financials · pnl · pnl-pdf · lease-pdf · csv
+types/database.ts · middleware.ts · vercel.json (crons) · supabase/{schema,seed}.sql
 ```
 
 ---
@@ -173,10 +179,41 @@ was never being set, so the vendor completion-rate stat was stuck at 0%
 
 ---
 
-## 6. Notes for later phases
+## 6. Phase 4 checklist
+
+| Item | Status |
+|---|---|
+| Admin compliance dashboard: all properties, status badges, county/status filters, click-into full checklist | ✅ `/admin/compliance`, `/admin/compliance/[propertyId]` |
+| Red stat card counts items expiring ≤30 days, links to the dashboard | ✅ `app/(admin)/admin/dashboard/page.tsx` |
+| County-specific compliance items auto-created on property add | ✅ `lib/compliance.ts` `createComplianceItems`, wired into both `addProperty` and onboarding's `saveProperty` |
+| Lead paint disclosure + cert only for pre-1978 (`lead_paint_required`) properties | ✅ |
+| Prince George's DPIE license replaces the base state license; Tenant Bill of Rights item added | ✅ (confirmed reading of ambiguous spec wording) |
+| Charles County gets its own county license, smoke/CO cert, and a distinct lead-paint inspection cert | ✅ |
+| St. Mary's County gets a county registration item | ✅ |
+| Daily cron flips expiring/expired status, emails landlords | ✅ `flip_compliance_statuses()` (migration `0010`) + `/api/cron/compliance-check` |
+| Landlord dashboard shows live compliance + lease-renewal alert banners | ✅ `components/landlord/AlertBanners.tsx` |
+| Lease renewal alert fires 60 days before `end_date`, once per lease | ✅ `/api/cron/lease-renewal-check`, guarded by `renewal_alert_sent` |
+| Renew option: draft lease PDF from template + terms, landlord-only review before any tenant contact | ✅ `lease_renewals` table (`draft_review`), `lib/lease-pdf.tsx`, `/landlord/tenants/[leaseId]` |
+| Landlord approval sends a placeholder tenant copy via a single swappable function | ✅ `lib/esignature.ts` `sendLeaseForSignature()` |
+| "Mark as Signed" creates the new lease, expires the old one, stores the signed copy in `documents` | ✅ `markRenewalSigned` |
+| No LeaseRunner lease-generation call anywhere — LeaseRunner remains screening-only | ✅ verified, `lib/lease-pdf.tsx` is fully independent of `app/api/leaserunner/*` |
+| Month-to-month and turnover options, with a minimal move-out checklist on turnover | ✅ `leases.is_month_to_month`, `move_out_checklists` table |
+| P&L report: Month/Quarter/Year toggle (Month default), per-property → per-unit breakdown, PDF download | ✅ `/landlord/financials/reports`, `lib/pnl.ts`, `lib/pnl-pdf.tsx` |
+| P&L has no platform-fee line — Net to Landlord equals Rent Collected under this schema | ✅ commented in `lib/pnl.ts` |
+| Year-end CSV export (landlord + admin, no platform-fee column) | ✅ `/landlord/financials/export`, admin section on `/admin/financials`, shared `/api/financials/tax-export` (RLS scopes the audience) |
+
+### Deploying Phase 4
+This project's Vercel deployment has **no connected Git repository** — a
+`git push` alone does not ship anything, including the new `vercel.json` cron
+schedule. After running migration `0010` and setting `CRON_SECRET` /
+`RESEND_API_KEY` (etc.) in the Vercel project's env vars, deploy with
+`npx vercel --prod` from this directory.
+
+---
+
+## 7. Notes for later phases
 - **Phase 2** — Stripe Connect Express (onboarding Step 6), tenant ACH/card rent, 2.5% platform fee, webhooks, PDF receipts, admin financials.
-- **Phase 4** — Maryland compliance automation (rental license / lead paint / inspection), P&L + year-end CSV, lease-renewal alerts.
-- **Phase 5** — GHL contact sync + Calendar go-live, real LeaseRunner API, full QA, production deploy.
+- **Phase 5** — GHL contact sync + Calendar go-live, real LeaseRunner API and e-signature provider (swap into `lib/esignature.ts`), Christine's real lease template (swap into `lib/lease-pdf.tsx`), full QA, production deploy.
 
 Stub endpoints already return clear "Phase N" responses so nothing silently
 no-ops.

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase';
 import { PageHeader } from '@/components/ui/PortalShell';
@@ -66,10 +67,18 @@ export default async function AdminLandlords() {
                   <Badge value={u.access_level} />
                 </td>
                 <td className="px-4 py-3">
-                  <AccessLevelToggle
-                    userId={u.id}
-                    level={(u.access_level ?? 'limited') as AccessLevel}
-                  />
+                  <div className="flex flex-col items-start gap-2">
+                    <AccessLevelToggle
+                      userId={u.id}
+                      level={(u.access_level ?? 'limited') as AccessLevel}
+                    />
+                    <Link
+                      href={`/admin/landlords/${u.id}/financials/reports`}
+                      className="font-display font-bold text-navy underline"
+                    >
+                      View P&amp;L Reports
+                    </Link>
+                  </div>
                 </td>
               </tr>
             );

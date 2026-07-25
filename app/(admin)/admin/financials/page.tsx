@@ -4,6 +4,8 @@ import { PageHeader } from '@/components/ui/PortalShell';
 import { StatCard } from '@/components/ui/StatCard';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { DataTable, EmptyState } from '@/components/ui/EmptyState';
+import { Field, Input } from '@/components/ui/Field';
+import { Button } from '@/components/ui/Button';
 import { fmtMoney, fmtDate } from '@/lib/format';
 import {
   fetchPaymentRows,
@@ -26,6 +28,9 @@ const methodLabels: Record<string, string> = {
 export default async function AdminFinancials() {
   const supabase = createSupabaseServerClient(cookies());
   const rows = await fetchPaymentRows(supabase);
+  const now = new Date();
+  const defaultStart = `${now.getUTCFullYear()}-01-01`;
+  const defaultEnd = `${now.getUTCFullYear()}-12-31`;
 
   const paidThisMonth = rows.filter((r) => r.status === 'paid' && isThisMonth(r.paid_date));
   const collectedThisMonth = sumAmount(paidThisMonth);
@@ -124,6 +129,24 @@ export default async function AdminFinancials() {
             ))}
           </DataTable>
         )}
+      </Card>
+
+      <Card className="mt-8">
+        <CardHeader
+          title="Year-end tax export"
+          subtitle="All properties across all landlords. No platform-fee column or totals — that revenue is billed separately outside the rent-payment flow."
+        />
+        <form action="/api/financials/tax-export" method="GET" className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Start date" htmlFor="start">
+              <Input id="start" name="start" type="date" defaultValue={defaultStart} />
+            </Field>
+            <Field label="End date" htmlFor="end">
+              <Input id="end" name="end" type="date" defaultValue={defaultEnd} />
+            </Field>
+          </div>
+          <Button type="submit">Download CSV</Button>
+        </form>
       </Card>
     </>
   );

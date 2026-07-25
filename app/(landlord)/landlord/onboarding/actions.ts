@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth';
 import { syncContact, addContactTag } from '@/lib/ghl';
+import { createComplianceItems } from '@/lib/compliance';
 
 type ActionResult = { ok: boolean; step?: number; error?: string };
 
@@ -27,19 +28,26 @@ export async function saveProperty(formData: FormData): Promise<ActionResult> {
     const supabase = createSupabaseServerClient(cookies());
     const id = await landlordId();
     const unitCount = Number(formData.get('unit_count') || 1);
-    const { error } = await supabase.from('properties').insert({
-      landlord_id: id,
-      name: String(formData.get('name') || ''),
-      address: String(formData.get('address') || ''),
-      city: String(formData.get('city') || ''),
-      state: 'MD',
-      zip: String(formData.get('zip') || ''),
-      county: String(formData.get('county') || ''),
-      property_type: String(formData.get('property_type') || ''),
-      unit_count: unitCount,
-      lead_paint_required: formData.get('lead_paint_required') === 'on',
-    });
+    const county = String(formData.get('county') || '');
+    const leadPaintRequired = formData.get('lead_paint_required') === 'on';
+    const { data, error } = await supabase
+      .from('properties')
+      .insert({
+        landlord_id: id,
+        name: String(formData.get('name') || ''),
+        address: String(formData.get('address') || ''),
+        city: String(formData.get('city') || ''),
+        state: 'MD',
+        zip: String(formData.get('zip') || ''),
+        county,
+        property_type: String(formData.get('property_type') || ''),
+        unit_count: unitCount,
+        lead_paint_required: leadPaintRequired,
+      })
+      .select('id')
+      .single();
     if (error) return { ok: false, error: error.message };
+    await createComplianceItems(supabase, data.id, county, leadPaintRequired);
     await setStep(3);
     return { ok: true, step: 3 };
   } catch (e) {
