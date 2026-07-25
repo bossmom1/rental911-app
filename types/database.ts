@@ -33,7 +33,7 @@ export type ComplianceStatus =
 export type LeaseRenewalStatus = 'draft_review' | 'sent_to_tenant' | 'signed' | 'cancelled';
 export type WarrantyPath = 'afc' | 'own_warranty';
 export type AfcTier = 'diamond' | 'platinum';
-export type AfcClaimInvoiceStatus = 'pending' | 'submitted' | 'failed';
+export type AfcClaimInvoiceStatus = 'pending' | 'pending_manual' | 'submitted' | 'failed';
 
 export interface User {
   id: string;

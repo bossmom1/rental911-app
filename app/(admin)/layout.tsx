@@ -12,6 +12,7 @@ const NAV: NavItem[] = [
   { label: 'Maintenance', href: '/admin/maintenance' },
   { label: 'Vendors', href: '/admin/vendors' },
   { label: 'Compliance', href: '/admin/compliance' },
+  { label: 'AFC Claims', href: '/admin/afc-claims' },
   { label: 'Financials', href: '/admin/financials' },
 ];
 

@@ -169,3 +169,50 @@ export async function sendAfcWarrantyInvoiceEmail(
     return false;
   }
 }
+
+export interface AfcManualClaimEmailInput {
+  to: string[];
+  propertyAddress: string;
+  tenantName: string;
+  tenantContact: string;
+  landlordName: string;
+  afcTier: string;
+  deductible: string; // pre-formatted currency string
+  issueSummary: string;
+}
+
+/**
+ * Sent to admins when a tenant reports an issue on an AFC-path property,
+ * while AFC's own Request Service claim form is down and this is being
+ * filed manually as an interim fallback (see lib/afc.ts submitClaimInvoice).
+ */
+export async function sendAfcManualClaimEmail(input: AfcManualClaimEmailInput): Promise<boolean> {
+  const resend = getResend();
+  if (!resend) {
+    console.warn('[email] RESEND_API_KEY not set — skipping AFC manual claim email');
+    return false;
+  }
+  try {
+    const { error } = await resend.emails.send({
+      from: ALERTS_FROM_EMAIL,
+      to: input.to,
+      subject: `AFC claim needs manual filing — ${input.propertyAddress}`,
+      html: `
+        <p>AFC's Request Service form is currently down — please file this claim manually.</p>
+        <p><strong>Property:</strong> ${input.propertyAddress}</p>
+        <p><strong>Tenant:</strong> ${input.tenantName} (${input.tenantContact})</p>
+        <p><strong>Landlord:</strong> ${input.landlordName}</p>
+        <p><strong>AFC Plan:</strong> ${input.afcTier}</p>
+        <p><strong>Deductible:</strong> ${input.deductible}</p>
+        <p><strong>Issue:</strong> ${input.issueSummary}</p>
+        <p>File with AFC Home Club Service: <strong>770-973-2400</strong> or <strong>service@afchomeclub.com</strong>.</p>
+        <p>— Rental911</p>
+      `,
+    });
+    if (error) throw new Error(error.message);
+    return true;
+  } catch (err) {
+    console.error('[email] sendAfcManualClaimEmail failed (non-blocking):', err);
+    return false;
+  }
+}

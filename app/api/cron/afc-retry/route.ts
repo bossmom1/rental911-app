@@ -57,9 +57,11 @@ export async function GET(request: NextRequest) {
     await admin
       .from('afc_claim_invoices')
       .update(
-        result.ok
-          ? { status: 'submitted', submitted_at: new Date().toISOString() }
-          : { status: 'failed', error: result.error }
+        !result.ok
+          ? { status: 'failed', error: result.error }
+          : result.status === 'pending_manual'
+            ? { status: 'pending_manual' }
+            : { status: 'submitted', submitted_at: new Date().toISOString() }
       )
       .eq('id', claim.id);
     if (result.ok) claimsSucceeded++;

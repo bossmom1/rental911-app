@@ -32,6 +32,9 @@ const palette: Record<string, string> = {
   // access level
   full: 'bg-green-100 text-green-800 border-green-500',
   limited: 'bg-warning-yellow/20 text-yellow-800 border-warning-yellow',
+  // AFC claim invoices
+  pending_manual: 'bg-orange-100 text-orange-800 border-orange-500',
+  submitted: 'bg-green-100 text-green-800 border-green-500',
 };
 
 export function Badge({ value }: { value: string | null | undefined }) {

@@ -1,7 +1,9 @@
 import type { Page } from 'playwright-core';
 import { createSupabaseAdminClient } from '@/lib/supabase';
 import { withAfcBrowser } from '@/lib/afc-browser';
-import type { AfcTier } from '@/types/database';
+import { sendAfcManualClaimEmail } from '@/lib/email';
+import { fmtMoney } from '@/lib/format';
+import type { AfcClaimInvoiceStatus, AfcTier } from '@/types/database';
 
 const AFC_LOGIN_URL = 'https://afchomeclub.com/realtor/login'; // best-guess, unverified — see loginToAfc()
 const AFC_INVOICE_URL = 'https://afchomeclub.com/realtor/invoice';
@@ -126,28 +128,11 @@ async function confirmInvoiceGenerated(page: Page): Promise<boolean> {
   return confirmationPatterns.some((pattern) => pattern.test(bodyText));
 }
 
-/**
- * Thrown by submitClaimInvoice until the actual claim-filing flow is
- * confirmed — the "Create Invoice" form (used by submitWarrantyPurchaseInvoice
- * below) is a warranty-purchase form, not a claims screen; nothing about the
- * real claim-filing UI has been provided yet. Fails loudly rather than
- * silently pretending a guessed selector worked.
- */
-export class AfcFormNotConfirmedError extends Error {
-  constructor(step: string) {
-    super(
-      `AFC_FORM_NOT_CONFIRMED: ${step} — the real claim-filing form/flow on ` +
-        'afchomeclub.com has not been described yet (only the "Create Invoice" ' +
-        'warranty-purchase screen has been confirmed so far). Provide the ' +
-        'claim-filing screen details before this can run.'
-    );
-    this.name = 'AfcFormNotConfirmedError';
-  }
-}
-
 export interface AfcResult {
   ok: boolean;
   error?: string;
+  /** Explicit status override for the caller to persist — e.g. 'pending_manual' (see submitClaimInvoice). */
+  status?: AfcClaimInvoiceStatus;
 }
 
 /**
@@ -228,11 +213,22 @@ export async function submitWarrantyPurchaseInvoice(propertyId: string): Promise
 
 /**
  * Fires on each maintenance request submitted for a warranty_path='afc'
- * property. Should log into AFC, file the claim, generate a service invoice
- * for the property's afc_service_fee_cents amount. STILL STUBBED — only the
- * warranty-purchase "Create Invoice" screen has been confirmed so far; the
- * actual claim-filing screen/flow hasn't been described yet. See
- * AfcFormNotConfirmedError.
+ * property.
+ *
+ * INTERIM MANUAL FALLBACK (Christine-approved): AFC's own "Request Service"
+ * claim form (afchomeclub.com/service) is currently broken on their end
+ * (loops to login, no ETA) — no automation is attempted here. Instead this
+ * emails every admin user the claim details (property, tenant, landlord,
+ * plan tier, deductible, issue) plus AFC's Service line (770-973-2400 /
+ * service@afchomeclub.com) to file it manually, and reports back
+ * `status: 'pending_manual'` for the caller to persist. An admin then marks
+ * it submitted from /admin/afc-claims once filed
+ * (app/(admin)/admin/afc-claims/actions.ts).
+ *
+ * When AFC's Request Service form is fixed and its fields get mapped, this
+ * function swaps back to real headless-browser automation (same shape as
+ * submitWarrantyPurchaseInvoice above) — the caller-side status handling
+ * already understands both outcomes, so no other rework is needed.
  */
 export async function submitClaimInvoice(maintenanceRequestId: string): Promise<AfcResult> {
   try {
@@ -242,24 +238,50 @@ export async function submitClaimInvoice(maintenanceRequestId: string): Promise<
       .select(
         `id, title, description, category,
          tenant:users!maintenance_requests_tenant_id_fkey(full_name, email, phone),
-         unit:units(unit_number, property:properties(id, name, address, afc_tier, afc_service_fee_cents))`
+         unit:units(
+           unit_number,
+           property:properties(
+             id, name, address, afc_tier, afc_service_fee_cents,
+             landlord:users(full_name)
+           )
+         )`
       )
       .eq('id', maintenanceRequestId)
       .single();
     if (error || !request) throw new Error(error?.message || 'maintenance request not found');
+
+    const tenant = (request as any).tenant as
+      | { full_name: string | null; email: string | null; phone: string | null }
+      | null;
     const property = (request as any).unit?.property;
+    const landlord = property?.landlord as { full_name: string | null } | null;
     if (!property?.afc_tier) throw new Error('property is not on the AFC warranty path');
 
-    return await withAfcBrowser(async (page) => {
-      await loginToAfc(page);
-      await page.goto(AFC_INVOICE_URL, { waitUntil: 'domcontentloaded' });
-      // TODO: fill in the real claim-filing + service-invoice form once that
-      // screen is described. Needed at minimum: property identifier, issue
-      // description/category, tenant contact info, and the tenant's service
-      // fee (property.afc_service_fee_cents — landlord/tenant-facing, unlike
-      // the confidential tier pricing above).
-      throw new AfcFormNotConfirmedError('submitClaimInvoice: claim-filing form');
-    });
+    const { data: admins } = await admin.from('users').select('email').eq('role', 'admin');
+    const adminEmails = (admins ?? []).map((a) => a.email).filter(Boolean) as string[];
+
+    const tenantContact =
+      [tenant?.phone, tenant?.email].filter(Boolean).join(' / ') || 'no contact on file';
+    const issueSummary =
+      [request.title, request.category, request.description].filter(Boolean).join(' — ') ||
+      'No description provided';
+
+    if (adminEmails.length) {
+      await sendAfcManualClaimEmail({
+        to: adminEmails,
+        propertyAddress: property.address || property.name || 'Unknown property',
+        tenantName: tenant?.full_name || 'Tenant',
+        tenantContact,
+        landlordName: landlord?.full_name || 'Landlord',
+        afcTier: AFC_TIER_LABELS[property.afc_tier as AfcTier] ?? property.afc_tier,
+        deductible: fmtMoney((property.afc_service_fee_cents ?? 0) / 100),
+        issueSummary,
+      });
+    } else {
+      console.warn('[afc] submitClaimInvoice: no admin users found to notify');
+    }
+
+    return { ok: true, status: 'pending_manual' };
   } catch (err) {
     console.error('[afc] submitClaimInvoice failed:', err);
     return { ok: false, error: (err as Error).message };
