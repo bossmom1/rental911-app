@@ -10,6 +10,9 @@ const palette: Record<ComplianceStatus, string> = {
   expiring_soon: 'bg-warning-yellow/20 text-yellow-800 border-warning-yellow', // #EAB308, already exact
   expired: 'bg-red-100 text-red-700 border-[#DC2626]',
   not_on_file: 'bg-gray-100 text-ink border-[#6B7280]',
+  // Distinct light-blue neutral, deliberately different from not_on_file's
+  // gray — this is "doesn't apply here" (admin decision), not "missing".
+  not_applicable: 'bg-light-blue/30 text-navy border-light-blue',
 };
 
 const labels: Record<ComplianceStatus, string> = {
@@ -17,6 +20,7 @@ const labels: Record<ComplianceStatus, string> = {
   expiring_soon: 'Expiring Soon',
   expired: 'Expired',
   not_on_file: 'Not On File',
+  not_applicable: 'N/A',
 };
 
 export function ComplianceStatusBadge({

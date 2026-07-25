@@ -14,7 +14,13 @@ import { updateComplianceItemAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
-const STATUS_OPTIONS: ComplianceStatus[] = ['current', 'expiring_soon', 'expired', 'not_on_file'];
+const STATUS_OPTIONS: ComplianceStatus[] = [
+  'current',
+  'expiring_soon',
+  'expired',
+  'not_on_file',
+  'not_applicable',
+];
 
 export default async function AdminCompliancePropertyDetail({
   params,

@@ -26,7 +26,13 @@ interface PropertyRow {
   compliance_items: ComplianceItemRow[];
 }
 
-const STATUS_OPTIONS: ComplianceStatus[] = ['current', 'expiring_soon', 'expired', 'not_on_file'];
+const STATUS_OPTIONS: ComplianceStatus[] = [
+  'current',
+  'expiring_soon',
+  'expired',
+  'not_on_file',
+  'not_applicable',
+];
 
 function findItem(items: ComplianceItemRow[], types: string[]): ComplianceItemRow | undefined {
   return items.find((i) => types.includes(i.type));

@@ -28,7 +28,8 @@ export type ComplianceStatus =
   | 'current'
   | 'expiring_soon'
   | 'expired'
-  | 'not_on_file';
+  | 'not_on_file'
+  | 'not_applicable';
 export type LeaseRenewalStatus = 'draft_review' | 'sent_to_tenant' | 'signed' | 'cancelled';
 
 export interface User {
