@@ -1,6 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // playwright-core + @sparticuz/chromium (AFC Home Club automation, lib/afc-browser.ts)
+  // ship native binaries — exclude them from webpack bundling so Next traces
+  // them as external packages instead of trying to tree-shake/bundle them.
+  experimental: {
+    serverComponentsExternalPackages: ['playwright-core', '@sparticuz/chromium'],
+  },
   images: {
     remotePatterns: [
       // Supabase Storage public/signed URLs (avatars, documents)

@@ -50,6 +50,8 @@ cp .env.example .env.local
 | `LEASERUNNER_API_KEY`, `LEASERUNNER_API_BASE` | – | Tenant screening (Phase 5, mocked) |
 | `RESEND_API_KEY`, `RECEIPT_FROM_EMAIL`, `ALERTS_FROM_EMAIL` | – | Transactional email — receipts (Phase 2), compliance + lease renewal alerts (Phase 4) |
 | `CRON_SECRET` | – | Verifies Vercel Cron requests to `/api/cron/*` (Phase 4) |
+| `AFC_REALTOR_EMAIL`, `AFC_REALTOR_PASSWORD` | – | Server-only AFC Home Club realtor login for warranty/claim invoice automation (see `lib/afc.ts`) |
+| `NEXT_PUBLIC_AFC_HOME_CLUB_URL` | – | Admin sidebar AFC Home Club manual-login shortcut (defaults to `https://afchomeclub.com/realtor/invoice`) |
 
 ### Database
 In the Supabase SQL Editor, run in order:

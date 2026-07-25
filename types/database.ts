@@ -31,6 +31,9 @@ export type ComplianceStatus =
   | 'not_on_file'
   | 'not_applicable';
 export type LeaseRenewalStatus = 'draft_review' | 'sent_to_tenant' | 'signed' | 'cancelled';
+export type WarrantyPath = 'afc' | 'own_warranty';
+export type AfcTier = 'diamond' | 'platinum';
+export type AfcClaimInvoiceStatus = 'pending' | 'submitted' | 'failed';
 
 export interface User {
   id: string;
@@ -65,6 +68,13 @@ export interface Property {
   lead_paint_required: boolean;
   rental_license_number: string | null;
   rental_license_expiry: string | null;
+  /** 'afc' (Rental911-managed warranty automation) or 'own_warranty' (landlord self-files, no automation). */
+  warranty_path: WarrantyPath | null;
+  /** Only set when warranty_path = 'afc' — landlord's own pick from GHL onboarding, never chosen by Rental911. */
+  afc_tier: AfcTier | null;
+  /** Tenant-facing deductible tier in cents (7500|10000|12500 = $75/$100/$125). NOT AFC's actual tier pricing (confidential, server-only, see lib/afc.ts). */
+  afc_service_fee_cents: number | null;
+  afc_warranty_invoice_sent_at: string | null;
   created_at: string;
 }
 
@@ -248,6 +258,18 @@ export interface MoveOutChecklist {
   completed_at: string | null;
 }
 
+export interface AfcClaimInvoice {
+  id: string;
+  property_id: string | null;
+  maintenance_request_id: string | null;
+  landlord_id: string | null;
+  service_fee_cents: number | null;
+  status: AfcClaimInvoiceStatus | null;
+  generated_at: string;
+  submitted_at: string | null;
+  error: string | null;
+}
+
 /**
  * Minimal Database shape for the typed Supabase client.
  * Row/Insert/Update use the interfaces above; Insert makes DB-defaulted
@@ -279,6 +301,7 @@ export interface Database {
       compliance_items: Table<ComplianceItem>;
       lease_renewals: Table<LeaseRenewal>;
       move_out_checklists: Table<MoveOutChecklist>;
+      afc_claim_invoices: Table<AfcClaimInvoice>;
     };
     // NOTE: must be `{ [_ in never]: never }`, NOT `Record<string, never>`.
     // A string index signature here poisons `.from()` (Tables & Views) to `never`.

@@ -4,10 +4,12 @@ import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PortalShell';
+import { Card } from '@/components/ui/Card';
 import { RequestDetail } from '@/components/maintenance/RequestDetail';
 import { RealtimeRefresher } from '@/components/RealtimeRefresher';
 import { TenantDispatchPanel } from '@/components/maintenance/TenantDispatchPanel';
 import { RatingPanel } from '@/components/maintenance/RatingPanel';
+import { fmtMoney } from '@/lib/format';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +39,14 @@ export default async function TenantMaintenanceDetail({
   const unitLabel = unit
     ? `${unit.property?.name ?? 'Your home'} · Unit ${unit.unit_number ?? '—'}`
     : 'Your home';
+
+  // Only present for properties on the AFC Home Club warranty path (see
+  // lib/afc.ts submitClaimInvoice) — RLS scopes this to the tenant's own request.
+  const { data: claimInvoice } = await supabase
+    .from('afc_claim_invoices')
+    .select('service_fee_cents, status')
+    .eq('maintenance_request_id', params.id)
+    .maybeSingle();
 
   const { data: dispatches } = await supabase
     .from('vendor_dispatches')
@@ -69,6 +79,16 @@ export default async function TenantMaintenanceDetail({
         </Link>
       </div>
       <PageHeader title={request.title || 'Maintenance request'} subtitle={unitLabel} />
+      {claimInvoice?.service_fee_cents != null && (
+        <Card className="mb-4 border-l-4 border-l-warning-yellow">
+          <p className="font-display font-bold text-navy">Home warranty service fee</p>
+          <p className="text-ink/70">
+            This property is covered by a home warranty. Your service fee is{' '}
+            <strong>{fmtMoney(claimInvoice.service_fee_cents / 100)}</strong>, paid directly to
+            the technician at the visit — not through the app.
+          </p>
+        </Card>
+      )}
       {/* Tenants can chat but not change status; AI summary is admin/landlord-only. */}
       <RequestDetail
         request={request}

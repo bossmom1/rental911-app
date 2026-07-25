@@ -3,9 +3,11 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { createSupabaseServerClient } from '@/lib/supabase';
+import { waitUntil } from '@vercel/functions';
+import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth';
 import { notifyVendorOfDispatch } from '@/lib/dispatch';
+import { submitClaimInvoice } from '@/lib/afc';
 
 /**
  * Tenant creates a maintenance request. A chat thread is opened automatically:
@@ -53,6 +55,50 @@ export async function createRequest(formData: FormData): Promise<{ ok: boolean; 
 
   if (error || !request) {
     return { ok: false, error: error?.message || 'Could not create request.' };
+  }
+
+  // AFC Home Club: if this property is on the AFC warranty path, file the
+  // claim + generate the service invoice. Runs after the response (via
+  // waitUntil) so it never slows down the tenant's submission, and never
+  // blocks/rolls back the maintenance request itself if it fails — a
+  // 'pending'/'failed' row is picked up by the retry cron either way.
+  try {
+    const { data: unit } = await supabase
+      .from('units')
+      .select('property:properties(id, warranty_path, afc_service_fee_cents)')
+      .eq('id', lease.unit_id)
+      .maybeSingle();
+    const property = (unit as any)?.property;
+    if (property?.warranty_path === 'afc') {
+      const admin = createSupabaseAdminClient();
+      const { data: claim } = await admin
+        .from('afc_claim_invoices')
+        .insert({
+          property_id: property.id,
+          maintenance_request_id: request.id,
+          landlord_id: lease.landlord_id,
+          service_fee_cents: property.afc_service_fee_cents,
+          status: 'pending',
+        })
+        .select('id')
+        .single();
+      if (claim) {
+        waitUntil(
+          submitClaimInvoice(request.id).then((result) =>
+            admin
+              .from('afc_claim_invoices')
+              .update(
+                result.ok
+                  ? { status: 'submitted', submitted_at: new Date().toISOString() }
+                  : { status: 'failed', error: result.error }
+              )
+              .eq('id', claim.id)
+          )
+        );
+      }
+    }
+  } catch (afcErr) {
+    console.error('[afc] claim-invoice trigger failed (non-blocking):', afcErr);
   }
 
   // Auto-open the chat thread.

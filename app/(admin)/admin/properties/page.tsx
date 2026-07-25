@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase';
 import { PageHeader } from '@/components/ui/PortalShell';
@@ -36,6 +37,7 @@ export default async function AdminProperties() {
             'Units',
             'License',
             'Lead Paint',
+            'Warranty',
           ]}
         >
           {rows.map((p) => {
@@ -50,9 +52,12 @@ export default async function AdminProperties() {
             return (
               <tr key={p.id}>
                 <td className="px-4 py-3">
-                  <p className="font-display font-bold text-navy">
+                  <Link
+                    href={`/admin/properties/${p.id}`}
+                    className="font-display font-bold text-navy hover:underline"
+                  >
                     {p.name || p.address || 'Unnamed property'}
-                  </p>
+                  </Link>
                   <p className="text-ink/60">
                     {[p.city, p.state, p.zip].filter(Boolean).join(', ')}
                   </p>
@@ -79,6 +84,20 @@ export default async function AdminProperties() {
                     <Badge value="required" />
                   ) : (
                     <span className="text-ink/50">—</span>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {p.warranty_path === 'afc' ? (
+                    <span>
+                      AFC{p.afc_tier ? ` · ${p.afc_tier}` : ''}
+                      {!p.afc_warranty_invoice_sent_at && (
+                        <span className="block text-ink/60">invoice pending</span>
+                      )}
+                    </span>
+                  ) : p.warranty_path === 'own_warranty' ? (
+                    <span className="text-ink/70">Own warranty</span>
+                  ) : (
+                    <span className="text-ink/50">Not set</span>
                   )}
                 </td>
               </tr>

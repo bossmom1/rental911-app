@@ -18,4 +18,8 @@ export const brand = {
 export const GHL_CRM_URL =
   process.env.NEXT_PUBLIC_GHL_CRM_URL || 'https://app.gohighlevel.com';
 
+/** Manual login shortcut for Christine — separate from the AFC backend automation (lib/afc.ts). */
+export const AFC_HOME_CLUB_URL =
+  process.env.NEXT_PUBLIC_AFC_HOME_CLUB_URL || 'https://afchomeclub.com/realtor/invoice';
+
 export type Brand = typeof brand;

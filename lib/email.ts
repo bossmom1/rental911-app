@@ -135,3 +135,37 @@ export async function sendLeaseRenewalAlertEmail(
     return false;
   }
 }
+
+export interface AfcWarrantyInvoiceEmailInput {
+  to: string[];
+  landlordName: string;
+  propertyName: string;
+}
+
+/** Sent once, when a property's AFC Home Club warranty-purchase invoice is generated. */
+export async function sendAfcWarrantyInvoiceEmail(
+  input: AfcWarrantyInvoiceEmailInput
+): Promise<boolean> {
+  const resend = getResend();
+  if (!resend) {
+    console.warn('[email] RESEND_API_KEY not set — skipping AFC warranty invoice email');
+    return false;
+  }
+  try {
+    const { error } = await resend.emails.send({
+      from: ALERTS_FROM_EMAIL,
+      to: input.to,
+      subject: `AFC Home Club warranty invoice — ${input.propertyName}`,
+      html: `
+        <p>Hi ${input.landlordName},</p>
+        <p>Your AFC Home Club home warranty invoice for ${input.propertyName} has been generated. Check your AFC Home Club account for payment details.</p>
+        <p>— Rental911</p>
+      `,
+    });
+    if (error) throw new Error(error.message);
+    return true;
+  } catch (err) {
+    console.error('[email] sendAfcWarrantyInvoiceEmail failed (non-blocking):', err);
+    return false;
+  }
+}
