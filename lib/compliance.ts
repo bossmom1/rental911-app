@@ -10,6 +10,23 @@ import type { Database } from '@/types/database';
 export const PRINCE_GEORGES_COUNTY = 'Prince George’s';
 export const CHARLES_COUNTY = 'Charles';
 export const ST_MARYS_COUNTY = "St. Mary's";
+export const CALVERT_COUNTY = 'Calvert';
+
+/**
+ * Counties the compliance system explicitly supports — i.e. every county
+ * that either has its own checklist rules in buildChecklist() below (Charles,
+ * Prince George's, St. Mary's) or is a named, planned addition (Calvert:
+ * currently gets only the "all MD counties" base items, no county-specific
+ * rules yet). Used to populate the /admin/compliance county filter with a
+ * fixed list rather than deriving it from whichever counties happen to have
+ * properties on file yet.
+ */
+export const SUPPORTED_COUNTIES = [
+  CALVERT_COUNTY,
+  CHARLES_COUNTY,
+  PRINCE_GEORGES_COUNTY,
+  ST_MARYS_COUNTY,
+];
 
 interface ComplianceItemDraft {
   type: string;

@@ -8,6 +8,7 @@ import { StatCard } from '@/components/ui/StatCard';
 import { Field, Select } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { fmtDate } from '@/lib/format';
+import { SUPPORTED_COUNTIES } from '@/lib/compliance';
 import type { ComplianceStatus } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
@@ -65,10 +66,6 @@ export default async function AdminCompliance({
   const expired = allItems.filter((i) => i.status === 'expired').length;
   const notOnFile = allItems.filter((i) => i.status === 'not_on_file').length;
 
-  const counties = Array.from(
-    new Set(allProperties.map((p) => p.county).filter(Boolean) as string[])
-  ).sort();
-
   const rows = allProperties.filter((p) => {
     if (countyFilter && p.county !== countyFilter) return false;
     if (statusFilter && !(p.compliance_items ?? []).some((i) => i.status === statusFilter)) {
@@ -95,7 +92,7 @@ export default async function AdminCompliance({
           <Field label="County" htmlFor="county">
             <Select id="county" name="county" defaultValue={countyFilter}>
               <option value="">All counties</option>
-              {counties.map((c) => (
+              {SUPPORTED_COUNTIES.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
