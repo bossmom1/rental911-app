@@ -158,7 +158,7 @@ export interface MaintenanceChat {
 }
 
 export type LicenseStatus = 'active' | 'expired' | 'pending';
-export type MembershipStatus = 'active' | 'expired' | 'pending';
+export type MembershipStatus = 'not_started' | 'pending_payment' | 'active' | 'expired';
 
 export interface Vendor {
   id: string;
@@ -182,6 +182,8 @@ export interface Vendor {
   membership_start_date: string | null;
   membership_term_months: number;
   membership_status: MembershipStatus | null;
+  /** Reference-only display value ($199/mo); the actual quarterly charge is MEMBERSHIP_QUARTERLY_PRICE_CENTS in lib/vendor-membership.ts. */
+  membership_price_cents: number;
   ghl_contact_id: string | null;
 }
 
@@ -270,6 +272,21 @@ export interface AfcClaimInvoice {
   error: string | null;
 }
 
+export type VendorMembershipPaymentStatus = 'pending' | 'paid' | 'expired' | 'canceled';
+
+export interface VendorMembershipPayment {
+  id: string;
+  vendor_id: string;
+  amount_cents: number;
+  stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
+  status: VendorMembershipPaymentStatus;
+  period_start: string | null;
+  period_end: string | null;
+  created_at: string;
+  paid_at: string | null;
+}
+
 /**
  * Minimal Database shape for the typed Supabase client.
  * Row/Insert/Update use the interfaces above; Insert makes DB-defaulted
@@ -302,6 +319,7 @@ export interface Database {
       lease_renewals: Table<LeaseRenewal>;
       move_out_checklists: Table<MoveOutChecklist>;
       afc_claim_invoices: Table<AfcClaimInvoice>;
+      vendor_membership_payments: Table<VendorMembershipPayment, Partial<VendorMembershipPayment> & { vendor_id: string }>;
     };
     // NOTE: must be `{ [_ in never]: never }`, NOT `Record<string, never>`.
     // A string index signature here poisons `.from()` (Tables & Views) to `never`.

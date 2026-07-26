@@ -35,6 +35,10 @@ const palette: Record<string, string> = {
   // AFC claim invoices
   pending_manual: 'bg-orange-100 text-orange-800 border-orange-500',
   submitted: 'bg-green-100 text-green-800 border-green-500',
+  // vendor membership billing
+  not_started: 'bg-gray-100 text-ink border-gray-400',
+  pending_payment: 'bg-warning-yellow/20 text-yellow-800 border-warning-yellow',
+  canceled: 'bg-gray-100 text-ink border-gray-400',
 };
 
 export function Badge({ value }: { value: string | null | undefined }) {

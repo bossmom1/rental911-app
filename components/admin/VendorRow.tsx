@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { VendorActiveToggle } from '@/components/admin/VendorActiveToggle';
@@ -12,9 +13,11 @@ import type { Vendor } from '@/types/database';
 export function VendorRow({
   vendor,
   stats,
+  renewalDue,
 }: {
   vendor: Vendor;
   stats: { jobsDispatched: number; completionRate: number | null; avgRating: number | null; ratingCount: number };
+  renewalDue?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const lapsed = isVendorLapsed(vendor);
@@ -32,7 +35,9 @@ export function VendorRow({
   return (
     <tr>
       <td className="px-4 py-3">
-        <p className="font-display font-bold text-navy">{vendor.name || '—'}</p>
+        <Link href={`/admin/vendors/${vendor.id}`} className="font-display font-bold text-navy underline">
+          {vendor.name || '—'}
+        </Link>
         <p className="text-ink/60">{vendor.phone}</p>
         <p className="text-ink/60">{vendor.email}</p>
       </td>
@@ -47,7 +52,10 @@ export function VendorRow({
         )}
       </td>
       <td className="px-4 py-3">
-        <Badge value={vendor.membership_status} />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge value={vendor.membership_status} />
+          {renewalDue && <Badge value="expiring_soon" />}
+        </div>
       </td>
       <td className="px-4 py-3">{vendor.avg_response_hours}h</td>
       <td className="px-4 py-3">

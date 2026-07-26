@@ -25,7 +25,7 @@ const BLANK: VendorFormInput = {
   discount_offered: '',
   membership_start_date: '',
   membership_term_months: 12,
-  membership_status: 'pending',
+  membership_status: 'not_started',
   ghl_contact_id: '',
 };
 
@@ -46,7 +46,7 @@ function fromVendor(v: Vendor): VendorFormInput {
     discount_offered: v.discount_offered ?? '',
     membership_start_date: v.membership_start_date ?? '',
     membership_term_months: v.membership_term_months,
-    membership_status: v.membership_status ?? 'pending',
+    membership_status: v.membership_status ?? 'not_started',
     ghl_contact_id: v.ghl_contact_id ?? '',
   };
 }
@@ -168,7 +168,8 @@ export function VendorForm({ vendor, onDone }: { vendor?: Vendor; onDone?: () =>
             value={form.membership_status}
             onChange={(e) => set('membership_status', e.target.value as VendorFormInput['membership_status'])}
           >
-            <option value="pending">pending</option>
+            <option value="not_started">not started</option>
+            <option value="pending_payment">pending payment</option>
             <option value="active">active</option>
             <option value="expired">expired</option>
           </Select>

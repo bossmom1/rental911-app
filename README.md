@@ -47,6 +47,7 @@ cp .env.example .env.local
 | `GHL_API_KEY`, `GHL_LOCATION_ID` | – | GHL CRM sync + Calendar API (Phase 5) |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_SUMMARY_MODEL` | – | Maintenance chat summaries on close (Phase 3) |
 | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `PLATFORM_FEE_PERCENT` | – | Rent collection (Phase 2) |
+| `STRIPE_MEMBERSHIP_WEBHOOK_SECRET` | – | Separate, account-scoped (not Connect) webhook endpoint for vendor marketplace membership Checkout Sessions (see `app/api/stripe/webhook-vendor-membership`) |
 | `LEASERUNNER_API_KEY`, `LEASERUNNER_API_BASE` | – | Tenant screening (Phase 5, mocked) |
 | `RESEND_API_KEY`, `RECEIPT_FROM_EMAIL`, `ALERTS_FROM_EMAIL` | – | Transactional email — receipts (Phase 2), compliance + lease renewal alerts (Phase 4) |
 | `CRON_SECRET` | – | Verifies Vercel Cron requests to `/api/cron/*` (Phase 4) |
@@ -167,6 +168,7 @@ landlord's rows via the anon client — RLS returns an empty set. Policies live 
 | Vendor stats (jobs dispatched, completion rate, avg rating ≥3 ratings) | ✅ `/admin/vendors`, aggregated from `vendor_dispatches` |
 | Status badges match spec hex exactly (open/in_progress/vendor_assigned/completed/closed) | ✅ verified against live computed styles in production |
 | Live-computed vendor lapsed/overdue checks (no cron in this app) | ✅ `lib/vendors.ts`: `isVendorLapsed`, `isDispatchOverdue` |
+| Vendor marketplace membership billing: admin-only one-time Stripe Checkout charge per quarter ($199/mo, $597/quarter), Copy Link workflow, renewal reminder | ✅ `app/(admin)/admin/vendors/[vendorId]/*`, `app/api/stripe/webhook-vendor-membership`, migration `0015` |
 
 ### Verifying Phase 3
 Both dispatch paths, the public confirmation endpoint, the rating flow, AI

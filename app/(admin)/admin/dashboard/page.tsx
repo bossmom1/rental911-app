@@ -21,6 +21,9 @@ export default async function AdminDashboard() {
   const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
+  const in14 = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
   const today = now.toISOString().slice(0, 10);
 
   const [
@@ -31,6 +34,7 @@ export default async function AdminDashboard() {
     outstanding,
     pendingMaint,
     expiringCompliance,
+    paidMemberships,
     recentMaint,
   ] = await Promise.all([
     supabase.from('properties').select('*', { count: 'exact', head: true }),
@@ -58,6 +62,7 @@ export default async function AdminDashboard() {
       .or(
         `status.eq.expiring_soon,and(expiry_date.gte.${today},expiry_date.lte.${in30})`
       ),
+    supabase.from('vendor_membership_payments').select('vendor_id, period_end').eq('status', 'paid'),
     supabase
       .from('maintenance_requests')
       .select('id, title, priority, status, created_at')
@@ -81,6 +86,18 @@ export default async function AdminDashboard() {
     (sum, r) => sum + Number(r.amount ?? 0),
     0
   );
+
+  // Latest paid period per vendor — a vendor can have multiple paid quarters,
+  // only the most recent one's period_end determines renewal-due status.
+  const latestPeriodEndByVendor = new Map<string, string>();
+  for (const p of paidMemberships.data ?? []) {
+    if (!p.vendor_id || !p.period_end) continue;
+    const current = latestPeriodEndByVendor.get(p.vendor_id);
+    if (!current || p.period_end > current) latestPeriodEndByVendor.set(p.vendor_id, p.period_end);
+  }
+  const membershipsDueForRenewal = [...latestPeriodEndByVendor.values()].filter(
+    (periodEnd) => periodEnd <= in14
+  ).length;
 
   return (
     <>
@@ -122,6 +139,14 @@ export default async function AdminDashboard() {
             label="Compliance Items Expiring Within 30 Days"
             value={expiringCompliance.count ?? 0}
             sublabel="needs attention"
+          />
+        </Link>
+        <Link href="/admin/vendors" className="block rounded-xl focus:outline-none focus:ring-2 focus:ring-navy">
+          <StatCard
+            tone="red"
+            label="Vendor Memberships Due for Renewal"
+            value={membershipsDueForRenewal}
+            sublabel="within 14 days, or past due"
           />
         </Link>
       </div>

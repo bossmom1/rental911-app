@@ -14,6 +14,10 @@ export default async function AdminVendors() {
   const { data: dispatches } = await supabase
     .from('vendor_dispatches')
     .select('vendor_id, completion_confirmed, tenant_rating');
+  const { data: paidMemberships } = await supabase
+    .from('vendor_membership_payments')
+    .select('vendor_id, period_end')
+    .eq('status', 'paid');
 
   const statsByVendor = new Map<
     string,
@@ -31,6 +35,16 @@ export default async function AdminVendors() {
     statsByVendor.set(d.vendor_id, s);
   }
 
+  // Latest paid period per vendor — only the most recent quarter's period_end
+  // decides whether a renewal reminder is due.
+  const latestPeriodEndByVendor = new Map<string, string>();
+  for (const p of paidMemberships ?? []) {
+    if (!p.vendor_id || !p.period_end) continue;
+    const current = latestPeriodEndByVendor.get(p.vendor_id);
+    if (!current || p.period_end > current) latestPeriodEndByVendor.set(p.vendor_id, p.period_end);
+  }
+  const in14 = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
   const rows = vendors ?? [];
 
   return (
@@ -43,6 +57,7 @@ export default async function AdminVendors() {
         <DataTable columns={['Vendor', 'Trade', 'License', 'Membership', 'Avg response', 'Job stats', 'Action']}>
           {rows.map((v) => {
             const s = statsByVendor.get(v.id);
+            const latestPeriodEnd = latestPeriodEndByVendor.get(v.id);
             return (
               <VendorRow
                 key={v.id}
@@ -53,6 +68,7 @@ export default async function AdminVendors() {
                   avgRating: s && s.ratingCount > 0 ? s.ratingSum / s.ratingCount : null,
                   ratingCount: s?.ratingCount ?? 0,
                 }}
+                renewalDue={latestPeriodEnd != null && latestPeriodEnd <= in14}
               />
             );
           })}
