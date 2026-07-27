@@ -5,7 +5,7 @@ import { sendAfcManualClaimEmail } from '@/lib/email';
 import { fmtMoney } from '@/lib/format';
 import type { AfcClaimInvoiceStatus, AfcTier } from '@/types/database';
 
-const AFC_LOGIN_URL = 'https://afchomeclub.com/realtor/login'; // best-guess, unverified — see loginToAfc()
+const AFC_LOGIN_URL = 'https://afchomeclub.com/login'; // confirmed against real portal — redirects to /realtor/home on success
 const AFC_INVOICE_URL = 'https://afchomeclub.com/realtor/invoice';
 
 /**
@@ -49,11 +49,9 @@ function formatMMDDYYYY(date: Date): string {
 }
 
 /**
- * Logs into the AFC Home Club realtor portal. Field selectors are a
- * reasonable-confidence guess at a standard login form — UNVERIFIED against
- * the real page (login-gated, could not be inspected directly). Confirm
- * against the actual DOM (e.g. via Playwright codegen) before relying on
- * this in production.
+ * Logs into the AFC Home Club realtor portal. URL and field selectors
+ * confirmed against the real page with live credentials — lands on
+ * /realtor/home on success.
  */
 async function loginToAfc(page: Page): Promise<void> {
   const { email, password } = afcCredentials();
