@@ -35,7 +35,15 @@ export type WarrantyPath = 'afc' | 'own_warranty';
 export type AfcTier = 'diamond' | 'platinum';
 export type AfcClaimInvoiceStatus = 'pending' | 'pending_manual' | 'submitted' | 'failed';
 
-export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid';
+export type SubscriptionStatus =
+  | 'incomplete'
+  | 'incomplete_expired'
+  | 'trialing'
+  | 'active'
+  | 'past_due'
+  | 'canceled'
+  | 'unpaid'
+  | 'paused';
 export type OnboardingFeeStatus = 'not_started' | 'pending_payment' | 'paid';
 
 export interface User {

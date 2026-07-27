@@ -314,7 +314,17 @@ export async function activateOnboardingSubscription(
 
     if (params.activateNow) {
       const invoice = subscription.latest_invoice as Stripe.Invoice | null;
-      const intent = invoice?.payment_intent as Stripe.PaymentIntent | null | undefined;
+      let intent = invoice?.payment_intent as Stripe.PaymentIntent | null | undefined;
+
+      // payment_behavior: 'default_incomplete' creates the first invoice's
+      // PaymentIntent in 'requires_confirmation' — setting default_payment_method
+      // on the subscription does NOT auto-confirm it (verified against a real
+      // test-mode run; the earlier assumption that it would was wrong). Confirm
+      // explicitly, same as chargeOnboardingOneTime's one-time charge.
+      if (intent && intent.status === 'requires_confirmation') {
+        intent = await stripe.paymentIntents.confirm(intent.id, { payment_method: paymentMethodId });
+      }
+
       return {
         ok: true,
         status: intent?.status ?? subscription.status,
