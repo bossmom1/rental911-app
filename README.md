@@ -43,11 +43,13 @@ cp .env.example .env.local
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Service role — **server only** (tenant creation, summaries) |
 | `NEXT_PUBLIC_SITE_URL` | ✅ | Base URL for auth redirects |
 | `NEXT_PUBLIC_GHL_CRM_URL` | – | Admin sidebar CRM link (defaults to `https://app.gohighlevel.com`) |
-| `NEXT_PUBLIC_GHL_ONBOARDING_CALENDAR_EMBED` | – | GHL booking iframe URL for onboarding Step 8 |
+| `NEXT_PUBLIC_GHL_ONBOARDING_CALENDAR_EMBED` | – | GHL booking iframe URL for onboarding Step 9 |
 | `GHL_API_KEY`, `GHL_LOCATION_ID` | – | GHL CRM sync + Calendar API (Phase 5) |
+| `GHL_ONBOARDING_WORKFLOW_ID` | – | Workflow to enroll a landlord's GHL contact in after their onboarding fee is paid (Step 8) — optional, silently no-ops if unset |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_SUMMARY_MODEL` | – | Maintenance chat summaries on close (Phase 3) |
 | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `PLATFORM_FEE_PERCENT` | – | Rent collection (Phase 2) |
 | `STRIPE_MEMBERSHIP_WEBHOOK_SECRET` | – | Separate, account-scoped (not Connect) webhook endpoint for vendor marketplace membership Checkout Sessions (see `app/api/stripe/webhook-vendor-membership`) |
+| `STRIPE_ONBOARDING_WEBHOOK_SECRET` | – | Separate, account-scoped (not Connect) webhook endpoint for landlord onboarding-fee Checkout Sessions + subscription updates (see `app/api/stripe/webhook-landlord-onboarding`) |
 | `LEASERUNNER_API_KEY`, `LEASERUNNER_API_BASE` | – | Tenant screening (Phase 5, mocked) |
 | `RESEND_API_KEY`, `RECEIPT_FROM_EMAIL`, `ALERTS_FROM_EMAIL` | – | Transactional email — receipts (Phase 2), compliance + lease renewal alerts (Phase 4) |
 | `CRON_SECRET` | – | Verifies Vercel Cron requests to `/api/cron/*` (Phase 4) |
@@ -130,9 +132,10 @@ types/database.ts · middleware.ts · vercel.json (crons) · supabase/{schema,se
 | Admin dashboard colored stat cards with real counts | ✅ navy/gold/red cards, live queries |
 | GHL button in admin sidebar → `app.gohighlevel.com` | ✅ gold bg / navy text, new tab, always visible |
 | Landlord adds property, unit, tenant via UI | ✅ onboarding + portal add-forms |
-| Onboarding wizard: 8 steps in order | ✅ step-gated via `onboarding_step` |
-| Step 8 GHL calendar embed | ✅ iframe from `NEXT_PUBLIC_GHL_ONBOARDING_CALENDAR_EMBED` |
-| Skipping Step 8 → limited access + banner | ✅ `access_level='limited'` + banner |
+| Onboarding wizard: 9 steps in order | ✅ step-gated via `onboarding_step` |
+| Step 8: onboarding-fee billing (Standard/Placement Only/Portfolio tiers, real Stripe Subscription) | ✅ `components/landlord/OnboardingFeeStep.tsx`, `lib/landlord-onboarding.ts`, migration `0016` |
+| Step 9 GHL calendar embed | ✅ iframe from `NEXT_PUBLIC_GHL_ONBOARDING_CALENDAR_EMBED` |
+| Skipping Step 9 → limited access + banner | ✅ `access_level='limited'` + banner |
 | Full access only after Christine toggles | ✅ admin Landlords page toggle → `access_level='full'` |
 | Tenant sees unit + lease summary | ✅ tenant dashboard |
 | Tenant submits maintenance request | ✅ `/tenant/maintenance/new` |

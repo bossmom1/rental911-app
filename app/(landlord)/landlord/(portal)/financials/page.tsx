@@ -7,6 +7,7 @@ import { StatCard } from '@/components/ui/StatCard';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { DataTable, EmptyState } from '@/components/ui/EmptyState';
 import { Badge } from '@/components/ui/Badge';
+import { LinkButton } from '@/components/ui/Button';
 import { fmtMoney, fmtDate } from '@/lib/format';
 import { fetchPaymentRows, isThisMonth, OUTSTANDING_STATUSES, sumAmount, sumLateFees } from '@/lib/financials';
 import { RealtimeRefresher } from '@/components/RealtimeRefresher';
@@ -98,6 +99,20 @@ export default async function LandlordFinancials() {
           returns — this only risks a wasted refresh, never a data leak. */}
       <RealtimeRefresher table="rent_payments" channelKey={`rent-landlord-${current!.authId}`} />
       <PageHeader title="Financials" subtitle="Rent collected across your properties." />
+
+      {current?.profile?.onboarding_fee_status !== 'paid' && (
+        <Card className="mb-6">
+          <CardHeader
+            title="Onboarding Fee"
+            subtitle="Your Rental911 onboarding fee hasn't been paid yet — pick your package and pay to finish setup."
+            action={
+              <LinkButton href="/landlord/onboarding" variant="gold">
+                Pay Onboarding Fee
+              </LinkButton>
+            }
+          />
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <StatCard tone="gold" label="Rent Collected This Month" value={fmtMoney(collectedThisMonth)} />

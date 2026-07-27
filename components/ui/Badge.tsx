@@ -39,6 +39,10 @@ const palette: Record<string, string> = {
   not_started: 'bg-gray-100 text-ink border-gray-400',
   pending_payment: 'bg-warning-yellow/20 text-yellow-800 border-warning-yellow',
   canceled: 'bg-gray-100 text-ink border-gray-400',
+  // landlord onboarding-fee subscriptions
+  trialing: 'bg-light-blue/40 text-navy border-light-blue',
+  past_due: 'bg-orange-100 text-orange-800 border-orange-500',
+  unpaid: 'bg-red-100 text-red-700 border-red-500',
 };
 
 export function Badge({ value }: { value: string | null | undefined }) {

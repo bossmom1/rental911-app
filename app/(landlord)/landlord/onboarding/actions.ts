@@ -6,6 +6,21 @@ import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/sup
 import { getCurrentUser } from '@/lib/auth';
 import { syncContact, addContactTag } from '@/lib/ghl';
 import { createComplianceItems } from '@/lib/compliance';
+import {
+  createOnboardingCheckoutSession,
+  STANDARD_ONBOARDING_FEE_PER_UNIT_CENTS,
+  STANDARD_MONTHLY_PER_UNIT_CENTS,
+  STANDARD_QUARTERLY_PER_UNIT_CENTS,
+  PLACEMENT_ONLY_PER_UNIT_CENTS,
+  PORTFOLIO_AUDIT_PER_UNIT_CENTS,
+  PORTFOLIO_MONTHLY_PER_UNIT_CENTS,
+  PORTFOLIO_QUARTERLY_PER_UNIT_CENTS,
+  ELITE_ADDON_HOURLY_CENTS,
+  type OnboardingTier,
+  type OnboardingBillingOption,
+  type PortfolioServiceModel,
+} from '@/lib/landlord-onboarding';
+import type { OnboardingFeeStatus } from '@/types/database';
 
 type ActionResult = { ok: boolean; step?: number; error?: string };
 
@@ -219,7 +234,7 @@ export async function advanceStep(to: number): Promise<ActionResult> {
 }
 
 /**
- * Step 8 — finish onboarding. `booked` distinguishes "I booked my call with
+ * Step 9 — finish onboarding. `booked` distinguishes "I booked my call with
  * Christine" from "skip for now". Either way onboarding_complete is set so the
  * landlord can enter the portal, but access_level stays 'limited' until
  * Christine manually grants full access from the admin Landlords page.
@@ -230,7 +245,7 @@ export async function completeOnboarding(booked: boolean): Promise<ActionResult>
     const id = await landlordId();
     const { error } = await supabase
       .from('users')
-      .update({ onboarding_complete: true, onboarding_step: 8 })
+      .update({ onboarding_complete: true, onboarding_step: 9 })
       .eq('id', id);
     if (error) return { ok: false, error: error.message };
 
@@ -242,7 +257,129 @@ export async function completeOnboarding(booked: boolean): Promise<ActionResult>
       }
     }
     revalidatePath('/landlord', 'layout');
-    return { ok: true, step: 8 };
+    return { ok: true, step: 9 };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** Current onboarding-fee status — used by Step 8 to poll after returning from Stripe. */
+export async function getOnboardingFeeStatus(): Promise<OnboardingFeeStatus> {
+  const supabase = createSupabaseServerClient(cookies());
+  const id = await landlordId();
+  const { data } = await supabase
+    .from('users')
+    .select('onboarding_fee_status')
+    .eq('id', id)
+    .maybeSingle();
+  return data?.onboarding_fee_status ?? 'not_started';
+}
+
+export interface OnboardingFeeCheckoutInput {
+  tier: OnboardingTier;
+  billingOption: OnboardingBillingOption | null;
+  portfolioServiceModel: PortfolioServiceModel | null;
+  totalUnits: number;
+  eliteAddonServices: string[];
+  activateNow: boolean;
+}
+
+/**
+ * Step 8 — generate the Checkout Session for the landlord's onboarding fee.
+ * Inserts the ledger row first (status 'pending') so its id can be tagged
+ * into the session's metadata; the webhook resolves the row from that
+ * metadata, not by matching the charge amount.
+ */
+export async function generateOnboardingFeeCheckout(
+  input: OnboardingFeeCheckoutInput
+): Promise<ActionResult & { checkoutUrl?: string }> {
+  try {
+    const supabase = createSupabaseServerClient(cookies());
+    const current = await getCurrentUser();
+    if (current?.profile?.role !== 'landlord' || !current.profile) {
+      return { ok: false, error: 'Not authorized' };
+    }
+    const landlord = current.profile;
+    const units = Math.max(1, input.totalUnits);
+
+    const isStandard = input.tier === 'standard';
+    const isPortfolio = input.tier === 'portfolio';
+    const isQuarterly = isStandard
+      ? input.billingOption === 'quarterly'
+      : input.portfolioServiceModel === 'external_system';
+
+    const onboardingFeeCents = input.tier === 'placement_only'
+      ? PLACEMENT_ONLY_PER_UNIT_CENTS * units
+      : isStandard
+        ? STANDARD_ONBOARDING_FEE_PER_UNIT_CENTS * units
+        : PORTFOLIO_AUDIT_PER_UNIT_CENTS * units;
+
+    const subscriptionUnitPriceCents = input.tier === 'placement_only'
+      ? null
+      : isStandard
+        ? (isQuarterly ? STANDARD_QUARTERLY_PER_UNIT_CENTS : STANDARD_MONTHLY_PER_UNIT_CENTS)
+        : (isQuarterly ? PORTFOLIO_QUARTERLY_PER_UNIT_CENTS : PORTFOLIO_MONTHLY_PER_UNIT_CENTS);
+
+    const eliteAddonServices = input.eliteAddonServices ?? [];
+    const eliteAddonTotalCents = eliteAddonServices.length * ELITE_ADDON_HOURLY_CENTS;
+
+    const activateNow = input.tier === 'placement_only' ? false : input.activateNow;
+    const subscriptionChargeToday = activateNow ? (subscriptionUnitPriceCents ?? 0) * units : 0;
+    const amountChargedTodayCents = onboardingFeeCents + subscriptionChargeToday + eliteAddonTotalCents;
+
+    const { data: payment, error: insertError } = await supabase
+      .from('landlord_onboarding_payments')
+      .insert({
+        landlord_id: landlord.id,
+        tier: input.tier,
+        billing_option: input.tier === 'placement_only' ? null : (isQuarterly ? 'quarterly' : 'monthly'),
+        portfolio_service_model: isPortfolio ? input.portfolioServiceModel : null,
+        total_units: units,
+        onboarding_fee_cents: onboardingFeeCents,
+        subscription_unit_price_cents: subscriptionUnitPriceCents,
+        elite_addon_services: eliteAddonServices,
+        elite_addon_total_cents: eliteAddonTotalCents,
+        activate_now: activateNow,
+        amount_charged_today_cents: amountChargedTodayCents,
+      })
+      .select('id')
+      .single();
+    if (insertError || !payment) {
+      return { ok: false, error: insertError?.message || 'Could not create the payment record.' };
+    }
+
+    let session;
+    try {
+      session = await createOnboardingCheckoutSession(
+        landlord,
+        {
+          tier: input.tier,
+          billingOption: input.tier === 'placement_only' ? null : (isQuarterly ? 'quarterly' : 'monthly'),
+          portfolioServiceModel: isPortfolio ? input.portfolioServiceModel : null,
+          totalUnits: units,
+          eliteAddonServices,
+          activateNow,
+        },
+        payment.id
+      );
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Could not create Stripe Checkout session.' };
+    }
+    if (!session.url) return { ok: false, error: 'Stripe did not return a Checkout URL.' };
+
+    const { error: updateError } = await supabase
+      .from('landlord_onboarding_payments')
+      .update({ stripe_checkout_session_id: session.id })
+      .eq('id', payment.id);
+    if (updateError) return { ok: false, error: updateError.message };
+
+    await supabase
+      .from('users')
+      .update({ onboarding_fee_status: 'pending_payment' })
+      .eq('id', landlord.id)
+      .neq('onboarding_fee_status', 'paid');
+
+    return { ok: true, checkoutUrl: session.url };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }

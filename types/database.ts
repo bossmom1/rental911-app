@@ -35,6 +35,9 @@ export type WarrantyPath = 'afc' | 'own_warranty';
 export type AfcTier = 'diamond' | 'platinum';
 export type AfcClaimInvoiceStatus = 'pending' | 'pending_manual' | 'submitted' | 'failed';
 
+export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'unpaid';
+export type OnboardingFeeStatus = 'not_started' | 'pending_payment' | 'paid';
+
 export interface User {
   id: string;
   email: string;
@@ -50,6 +53,12 @@ export interface User {
   stripe_account_id: string | null;
   /** Mirrors the Stripe account's charges_enabled; kept fresh by account.updated. */
   stripe_charges_enabled: boolean | null;
+  /** Landlord's recurring onboarding subscription (Standard/Portfolio tiers only). */
+  stripe_subscription_id: string | null;
+  /** Kept fresh by customer.subscription.updated/deleted. */
+  subscription_status: SubscriptionStatus | null;
+  /** Onboarding-fee Checkout status — independent of access_level, which stays a manual admin gate. */
+  onboarding_fee_status: OnboardingFeeStatus | null;
   created_at: string;
 }
 
@@ -287,6 +296,32 @@ export interface VendorMembershipPayment {
   paid_at: string | null;
 }
 
+export type LandlordOnboardingTier = 'standard' | 'placement_only' | 'portfolio';
+export type LandlordOnboardingBillingOption = 'monthly' | 'quarterly';
+export type LandlordPortfolioServiceModel = 'rental911_portal' | 'external_system';
+export type LandlordOnboardingPaymentStatus = 'pending' | 'paid' | 'expired' | 'canceled';
+
+export interface LandlordOnboardingPayment {
+  id: string;
+  landlord_id: string;
+  tier: LandlordOnboardingTier;
+  billing_option: LandlordOnboardingBillingOption | null;
+  portfolio_service_model: LandlordPortfolioServiceModel | null;
+  total_units: number;
+  onboarding_fee_cents: number;
+  subscription_unit_price_cents: number | null;
+  elite_addon_services: string[];
+  elite_addon_total_cents: number;
+  activate_now: boolean;
+  amount_charged_today_cents: number;
+  stripe_checkout_session_id: string | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  status: LandlordOnboardingPaymentStatus;
+  created_at: string;
+  paid_at: string | null;
+}
+
 /**
  * Minimal Database shape for the typed Supabase client.
  * Row/Insert/Update use the interfaces above; Insert makes DB-defaulted
@@ -320,6 +355,7 @@ export interface Database {
       move_out_checklists: Table<MoveOutChecklist>;
       afc_claim_invoices: Table<AfcClaimInvoice>;
       vendor_membership_payments: Table<VendorMembershipPayment, Partial<VendorMembershipPayment> & { vendor_id: string }>;
+      landlord_onboarding_payments: Table<LandlordOnboardingPayment, Partial<LandlordOnboardingPayment> & { landlord_id: string }>;
     };
     // NOTE: must be `{ [_ in never]: never }`, NOT `Record<string, never>`.
     // A string index signature here poisons `.from()` (Tables & Views) to `never`.

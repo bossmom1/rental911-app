@@ -14,6 +14,8 @@ import {
   advanceStep,
   completeOnboarding,
 } from '@/app/(landlord)/landlord/onboarding/actions';
+import { OnboardingFeeStep } from '@/components/landlord/OnboardingFeeStep';
+import type { OnboardingFeeStatus } from '@/types/database';
 
 const STEPS = [
   'Create account',
@@ -23,6 +25,7 @@ const STEPS = [
   'Documents',
   'Bank payouts',
   'Preview portal',
+  'Onboarding fee',
   'Confirmation call',
 ];
 
@@ -41,13 +44,17 @@ export function OnboardingWizard({
   initialStep,
   landlordId,
   email,
+  initialTotalUnits,
+  initialOnboardingFeeStatus,
 }: {
   initialStep: number;
   landlordId: string;
   email: string;
+  initialTotalUnits: number;
+  initialOnboardingFeeStatus: OnboardingFeeStatus;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState(Math.min(Math.max(initialStep, 1), 8));
+  const [step, setStep] = useState(Math.min(Math.max(initialStep, 1), 9));
   const [error, setError] = useState<string | null>(null);
   // Separate from `pending`: the Stripe hop is a plain fetch + full navigation,
   // not a server action, so useTransition never sees it.
@@ -86,12 +93,12 @@ export function OnboardingWizard({
         <div className="mb-6 flex items-center justify-between">
           <Logo href="#" />
           <p className="font-display font-bold text-navy">
-            Step {step} of 8
+            Step {step} of 9
           </p>
         </div>
 
         {/* Stepper */}
-        <ol className="mb-8 grid grid-cols-4 gap-2 sm:grid-cols-8">
+        <ol className="mb-8 grid grid-cols-3 gap-2 sm:grid-cols-9">
           {STEPS.map((label, i) => {
             const n = i + 1;
             const state =
@@ -362,6 +369,20 @@ export function OnboardingWizard({
           )}
 
           {step === 8 && (
+            <StepShell
+              title="Onboarding fee"
+              subtitle="Choose your package and complete your onboarding payment to continue."
+            >
+              <OnboardingFeeStep
+                initialTotalUnits={initialTotalUnits}
+                initialOnboardingFeeStatus={initialOnboardingFeeStatus}
+                pending={pending}
+                onContinue={() => run(() => advanceStep(9))}
+              />
+            </StepShell>
+          )}
+
+          {step === 9 && (
             <StepShell
               title="Schedule your confirmation call with Christine"
               subtitle="Required to unlock full access. Book a time below."

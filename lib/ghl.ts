@@ -85,6 +85,72 @@ export async function addContactTag(
   }
 }
 
+/**
+ * POST a new contact and return its id (unlike `syncContact`, which returns a
+ * bare boolean and has existing callers depending on that contract). Needed
+ * for flows that must tag/enroll the contact right after creating it, e.g.
+ * landlord onboarding-fee billing. Non-blocking: returns { ok: false } on
+ * any failure, same silent-degrade convention as the rest of this file.
+ */
+export async function createGhlContact(
+  input: GhlContactInput
+): Promise<{ ok: boolean; contactId?: string }> {
+  const { apiKey, locationId, configured } = ghlConfig();
+  if (!configured) {
+    console.warn('[ghl] not configured — skipping contact creation');
+    return { ok: false };
+  }
+  try {
+    const [firstName, ...rest] = (input.name ?? '').split(' ');
+    const res = await fetch(`${GHL_BASE}/contacts/`, {
+      method: 'POST',
+      headers: headers(apiKey!),
+      body: JSON.stringify({
+        locationId,
+        email: input.email,
+        phone: input.phone ?? undefined,
+        firstName: firstName || undefined,
+        lastName: rest.join(' ') || undefined,
+        tags: input.tags ?? [input.role],
+      }),
+    });
+    if (!res.ok) throw new Error(`GHL ${res.status}: ${await res.text()}`);
+    const data = (await res.json()) as { contact?: { id?: string } };
+    return { ok: true, contactId: data.contact?.id };
+  } catch (err) {
+    console.error('[ghl] createGhlContact failed (non-blocking):', err);
+    return { ok: false };
+  }
+}
+
+/**
+ * Enroll a contact in a GHL workflow. Non-blocking. No-ops (returns false)
+ * when `workflowId` is falsy — used so a caller can pass an unset env var
+ * without special-casing it, rather than guessing at a workflow id.
+ */
+export async function enrollInWorkflow(
+  contactId: string,
+  workflowId: string | null | undefined
+): Promise<boolean> {
+  const { apiKey, configured } = ghlConfig();
+  if (!configured || !workflowId) return false;
+  try {
+    const res = await fetch(
+      `${GHL_BASE}/contacts/${contactId}/workflow/${workflowId}`,
+      {
+        method: 'POST',
+        headers: headers(apiKey!),
+        body: JSON.stringify({ eventStartTime: new Date().toISOString() }),
+      }
+    );
+    if (!res.ok) throw new Error(`GHL ${res.status}: ${await res.text()}`);
+    return true;
+  } catch (err) {
+    console.error('[ghl] enrollInWorkflow failed (non-blocking):', err);
+    return false;
+  }
+}
+
 // ---- Calendar ---------------------------------------------------------------
 
 /** GET /calendars — list Christine's GHL calendars. */
