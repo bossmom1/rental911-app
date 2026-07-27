@@ -211,7 +211,13 @@ export async function chargeOnboardingOneTime(
   contact: OnboardingBillingContact,
   params: OnboardingCheckoutParams,
   paymentId: string,
-  paymentMethodId: string
+  paymentMethodId: string,
+  // TEMPORARY — REMOVE AFTER LIVE VERIFICATION. Overrides the charged amount
+  // (never the recorded pricing) for one deliberately gated live-mode test
+  // pass. Caller (app/checkout/actions.ts) only ever passes this when a
+  // server-only env var AND the submitted contact email both match an exact
+  // pre-agreed value — never reachable by ordinary checkout traffic.
+  verifyOverrideAmountCents?: number
 ): Promise<OnboardingChargeResult & { customerId?: string }> {
   const stripe = getStripe();
 
@@ -240,9 +246,10 @@ export async function chargeOnboardingOneTime(
 
     const metadata: Record<string, string> = { rental911_landlord_onboarding_payment_id: paymentId };
     if (contact.id) metadata.rental911_landlord_id = contact.id;
+    if (verifyOverrideAmountCents != null) metadata.rental911_verify_override = 'true';
 
     const intent = await stripe.paymentIntents.create({
-      amount: amounts.oneTimeTotalCents,
+      amount: verifyOverrideAmountCents ?? amounts.oneTimeTotalCents,
       currency: 'usd',
       customer: customerId,
       payment_method: paymentMethodId,

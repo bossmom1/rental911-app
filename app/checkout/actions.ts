@@ -74,6 +74,18 @@ export async function submitOnboardingCheckout(
     eliteAddonServices: params.eliteAddonServices,
   });
 
+  // TEMPORARY — REMOVE AFTER LIVE VERIFICATION (see task tracker). Requires
+  // BOTH a server-only env var AND the submitted contact email to match an
+  // exact pre-agreed value — ordinary checkout traffic can never trigger
+  // this regardless of whether the env var happens to be set.
+  const verifyEmail = process.env.LIVE_CHECKOUT_VERIFY_EMAIL;
+  const isVerifyOverride =
+    process.env.LIVE_CHECKOUT_VERIFY_MODE === 'on' &&
+    !!verifyEmail &&
+    contact.email.trim().toLowerCase() === verifyEmail.toLowerCase();
+  const verifyOverrideCents = isVerifyOverride ? 100 : undefined;
+  const chargedTodayCents = verifyOverrideCents ?? amounts.oneTimeTotalCents;
+
   const { data: payment, error: insertError } = await admin
     .from('landlord_onboarding_payments')
     .insert({
@@ -87,7 +99,7 @@ export async function submitOnboardingCheckout(
       elite_addon_services: amounts.eliteAddonServices,
       elite_addon_total_cents: amounts.eliteAddonTotalCents,
       activate_now: tier === 'placement_only' ? false : params.activateNow,
-      amount_charged_today_cents: amounts.oneTimeTotalCents,
+      amount_charged_today_cents: chargedTodayCents,
       contact_email: contact.email.trim(),
       contact_name: `${contact.firstName.trim()} ${contact.lastName.trim()}`.trim(),
       contact_phone: contact.phone.trim(),
@@ -105,7 +117,7 @@ export async function submitOnboardingCheckout(
     stripe_customer_id: null,
   };
 
-  const charge = await chargeOnboardingOneTime(contactBilling, params, payment.id, paymentMethodId);
+  const charge = await chargeOnboardingOneTime(contactBilling, params, payment.id, paymentMethodId, verifyOverrideCents);
   if (!charge.ok) return { ok: false, error: charge.error };
 
   if (charge.customerId) {
