@@ -303,7 +303,8 @@ export type LandlordOnboardingPaymentStatus = 'pending' | 'paid' | 'expired' | '
 
 export interface LandlordOnboardingPayment {
   id: string;
-  landlord_id: string;
+  /** Null until the post-payment account-linking step, for the public pre-signup checkout flow. */
+  landlord_id: string | null;
   tier: LandlordOnboardingTier;
   billing_option: LandlordOnboardingBillingOption | null;
   portfolio_service_model: LandlordPortfolioServiceModel | null;
@@ -315,11 +316,16 @@ export interface LandlordOnboardingPayment {
   activate_now: boolean;
   amount_charged_today_cents: number;
   stripe_checkout_session_id: string | null;
+  stripe_payment_intent_id: string | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   status: LandlordOnboardingPaymentStatus;
   created_at: string;
   paid_at: string | null;
+  /** Captured directly at checkout when there's no landlord_id yet. */
+  contact_email: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
 }
 
 /**
@@ -355,7 +361,7 @@ export interface Database {
       move_out_checklists: Table<MoveOutChecklist>;
       afc_claim_invoices: Table<AfcClaimInvoice>;
       vendor_membership_payments: Table<VendorMembershipPayment, Partial<VendorMembershipPayment> & { vendor_id: string }>;
-      landlord_onboarding_payments: Table<LandlordOnboardingPayment, Partial<LandlordOnboardingPayment> & { landlord_id: string }>;
+      landlord_onboarding_payments: Table<LandlordOnboardingPayment>;
     };
     // NOTE: must be `{ [_ in never]: never }`, NOT `Record<string, never>`.
     // A string index signature here poisons `.from()` (Tables & Views) to `never`.

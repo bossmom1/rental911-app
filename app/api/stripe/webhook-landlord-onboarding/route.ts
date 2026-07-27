@@ -6,8 +6,9 @@ import { createGhlContact, addContactTag, enrollInWorkflow } from '@/lib/ghl';
 
 /**
  * POST /api/stripe/webhook-landlord-onboarding — records landlord onboarding-fee
- * Checkout Sessions and keeps the recurring Standard/Portfolio subscription's
- * status in sync.
+ * payments (both the in-wizard hosted-Checkout flow's Sessions and the public
+ * inline-Card-Element checkout pages' PaymentIntents) and keeps the recurring
+ * Standard/Portfolio subscription's status in sync.
  *
  * A separate endpoint (and signing secret) from /api/stripe/webhook (Connect,
  * rent) and /api/stripe/webhook-vendor-membership (account, vendor billing) —
@@ -139,6 +140,63 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   if (error) throw new Error(`users subscription_status update failed: ${error.message}`);
 }
 
+/**
+ * The public checkout pages (inline Card Element, `app/checkout/*`) charge
+ * the one-time portion via a directly confirmed PaymentIntent rather than a
+ * Checkout Session — there's no account yet at charge time, so `landlord_id`
+ * is typically null and GHL contact info comes from the payment row's own
+ * contact columns rather than a `users` lookup.
+ */
+async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
+  const paymentId = intent.metadata?.rental911_landlord_onboarding_payment_id;
+  if (!paymentId) {
+    // Not one of ours (e.g. a `stripe trigger` synthetic event, or rent/vendor traffic).
+    return;
+  }
+
+  const admin = createSupabaseAdminClient();
+
+  // Guarded by status='pending' so a redelivered event is a no-op.
+  const { data: updated, error: paymentError } = await admin
+    .from('landlord_onboarding_payments')
+    .update({
+      status: 'paid',
+      paid_at: new Date().toISOString(),
+      stripe_payment_intent_id: intent.id,
+    })
+    .eq('id', paymentId)
+    .eq('status', 'pending')
+    .select('tier, landlord_id, contact_email, contact_name, contact_phone')
+    .maybeSingle();
+  if (paymentError) throw new Error(`landlord_onboarding_payments update failed: ${paymentError.message}`);
+  if (!updated) return; // already processed (retry) or row not in 'pending' state
+
+  if (updated.landlord_id) {
+    await admin.from('users').update({ onboarding_fee_status: 'paid' }).eq('id', updated.landlord_id);
+  }
+
+  if (updated.contact_email) {
+    try {
+      await notifyGhl(
+        { email: updated.contact_email, full_name: updated.contact_name, phone: updated.contact_phone },
+        updated.tier
+      );
+    } catch (err) {
+      // GHL sync is best-effort — never fail the webhook over it.
+      console.error('[stripe/webhook-landlord-onboarding] GHL sync failed (non-blocking):', err);
+    }
+  }
+}
+
+/**
+ * No DB write — the row stays 'pending' so the same client-side flow can
+ * retry against a fresh PaymentIntent. The action that created the charge
+ * already surfaces the failure to the client directly for immediate UX.
+ */
+async function handlePaymentIntentFailed(intent: Stripe.PaymentIntent) {
+  console.warn('[stripe/webhook-landlord-onboarding] payment_intent.payment_failed', intent.id, intent.last_payment_error?.message);
+}
+
 export async function POST(request: NextRequest) {
   const signature = request.headers.get('stripe-signature');
   const webhookSecret = process.env.STRIPE_ONBOARDING_WEBHOOK_SECRET;
@@ -170,6 +228,12 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted':
         await handleSubscriptionUpdated(event.data.object);
+        break;
+      case 'payment_intent.succeeded':
+        await handlePaymentIntentSucceeded(event.data.object);
+        break;
+      case 'payment_intent.payment_failed':
+        await handlePaymentIntentFailed(event.data.object);
         break;
       default:
         // Acknowledge everything else so Stripe stops retrying it.

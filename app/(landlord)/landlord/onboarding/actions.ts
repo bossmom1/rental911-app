@@ -348,6 +348,7 @@ export async function generateOnboardingFeeCheckout(
       return { ok: false, error: insertError?.message || 'Could not create the payment record.' };
     }
 
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://rental911-app.vercel.app';
     let session;
     try {
       session = await createOnboardingCheckoutSession(
@@ -360,7 +361,11 @@ export async function generateOnboardingFeeCheckout(
           eliteAddonServices,
           activateNow,
         },
-        payment.id
+        payment.id,
+        {
+          success_url: `${siteUrl}/landlord/onboarding?onboarding_fee=success`,
+          cancel_url: `${siteUrl}/landlord/onboarding?onboarding_fee=cancelled`,
+        }
       );
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Could not create Stripe Checkout session.' };

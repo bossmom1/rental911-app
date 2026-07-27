@@ -1,6 +1,5 @@
 import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
-import type { User } from '@/types/database';
 import {
   STANDARD_ONBOARDING_FEE_PER_UNIT_CENTS,
   STANDARD_MONTHLY_PER_UNIT_CENTS,
@@ -10,6 +9,7 @@ import {
   PORTFOLIO_MONTHLY_PER_UNIT_CENTS,
   PORTFOLIO_QUARTERLY_PER_UNIT_CENTS,
   ELITE_ADDON_HOURLY_CENTS,
+  computeOnboardingAmounts,
   type OnboardingTier,
   type OnboardingBillingOption,
   type PortfolioServiceModel,
@@ -57,6 +57,21 @@ export interface OnboardingCheckoutParams {
   activateNow: boolean; // ignored for placement_only (no subscription to activate)
 }
 
+/**
+ * Billing contact for the Checkout Session — a real landlord (authenticated
+ * in-wizard flow, `id` set) or a not-yet-signed-up visitor (public pre-signup
+ * checkout, `id` null). Only when `id` is set does the session get tagged
+ * with `rental911_landlord_id`; the webhook always resolves the payment row
+ * via `rental911_landlord_onboarding_payment_id` alone, so this doesn't
+ * weaken idempotency — it just makes the landlord-id tag optional.
+ */
+export interface OnboardingBillingContact {
+  id: string | null;
+  email: string;
+  full_name: string | null;
+  stripe_customer_id: string | null;
+}
+
 function eliteLineItems(services: string[]): Stripe.Checkout.SessionCreateParams.LineItem[] {
   return services.map((service) => ({
     price_data: {
@@ -80,12 +95,12 @@ function eliteLineItems(services: string[]): Stripe.Checkout.SessionCreateParams
  * exists on `users` but has never actually been populated before this.
  */
 export async function createOnboardingCheckoutSession(
-  landlord: Pick<User, 'id' | 'email' | 'full_name' | 'stripe_customer_id'>,
+  landlord: OnboardingBillingContact,
   params: OnboardingCheckoutParams,
-  paymentId: string
+  paymentId: string,
+  returnUrls: { success_url: string; cancel_url: string }
 ): Promise<Stripe.Checkout.Session> {
   const stripe = getStripe();
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://rental911-app.vercel.app';
 
   const customerId =
     landlord.stripe_customer_id ??
@@ -96,12 +111,11 @@ export async function createOnboardingCheckoutSession(
       })
     ).id;
 
-  const metadata = {
+  const metadata: Record<string, string> = {
     rental911_landlord_onboarding_payment_id: paymentId,
-    rental911_landlord_id: landlord.id,
   };
-  const success_url = `${siteUrl}/landlord/onboarding?onboarding_fee=success`;
-  const cancel_url = `${siteUrl}/landlord/onboarding?onboarding_fee=cancelled`;
+  if (landlord.id) metadata.rental911_landlord_id = landlord.id;
+  const { success_url, cancel_url } = returnUrls;
 
   const eliteItems = eliteLineItems(params.eliteAddonServices);
 
@@ -176,4 +190,150 @@ export async function createOnboardingCheckoutSession(
     success_url,
     cancel_url,
   });
+}
+
+export type OnboardingChargeResult =
+  | { ok: true; status: string; requiresAction: boolean; clientSecret: string | null }
+  | { ok: false; error: string };
+
+/**
+ * Public checkout pages (inline Card Element, literal rebuild of the old
+ * rental911.net pages) — no hosted Checkout Session. The one-time portion
+ * (signing/audit/placement fee + Elite add-ons) is always its own directly
+ * confirmed PaymentIntent, charged today unconditionally regardless of the
+ * activate-now toggle (that toggle only affects the separate subscription
+ * step below). Mirrors the tenant rent flow's create->confirm pattern
+ * (`app/(tenant)/tenant/rent/actions.ts`): returns status for the client to
+ * resolve any `requires_action` (3D Secure) itself — the DB write happens in
+ * the webhook on `payment_intent.succeeded`, not here.
+ */
+export async function chargeOnboardingOneTime(
+  contact: OnboardingBillingContact,
+  params: OnboardingCheckoutParams,
+  paymentId: string,
+  paymentMethodId: string
+): Promise<OnboardingChargeResult & { customerId?: string }> {
+  const stripe = getStripe();
+
+  try {
+    const customerId =
+      contact.stripe_customer_id ??
+      (
+        await stripe.customers.create({
+          email: contact.email,
+          name: contact.full_name ?? undefined,
+        })
+      ).id;
+
+    await stripe.paymentMethods.attach(paymentMethodId, { customer: customerId });
+    await stripe.customers.update(customerId, {
+      invoice_settings: { default_payment_method: paymentMethodId },
+    });
+
+    const amounts = computeOnboardingAmounts({
+      tier: params.tier,
+      billingOption: params.billingOption,
+      portfolioServiceModel: params.portfolioServiceModel,
+      totalUnits: params.totalUnits,
+      eliteAddonServices: params.eliteAddonServices,
+    });
+
+    const metadata: Record<string, string> = { rental911_landlord_onboarding_payment_id: paymentId };
+    if (contact.id) metadata.rental911_landlord_id = contact.id;
+
+    const intent = await stripe.paymentIntents.create({
+      amount: amounts.oneTimeTotalCents,
+      currency: 'usd',
+      customer: customerId,
+      payment_method: paymentMethodId,
+      confirm: true,
+      automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+      description: `${amounts.onboardingFeeName}${amounts.eliteAddonServices.length ? ' + Elite Asset Services' : ''}`,
+      receipt_email: contact.email,
+      metadata,
+    });
+
+    return {
+      ok: true,
+      status: intent.status,
+      requiresAction: intent.status === 'requires_action',
+      clientSecret: intent.client_secret,
+      customerId,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Stripe request failed.';
+    console.error('[landlord-onboarding/one-time] failed:', message);
+    return { ok: false, error: message };
+  }
+}
+
+/**
+ * The recurring portion (Standard/Portfolio only) — a separate Stripe object
+ * from the one-time charge above, using the same already-attached payment
+ * method. `activateNow` charges its first invoice today (`default_incomplete`
+ * + confirm); otherwise a 30-day trial defers it, matching the same toggle
+ * semantics as the in-wizard Checkout-based flow.
+ */
+export async function activateOnboardingSubscription(
+  customerId: string,
+  params: OnboardingCheckoutParams,
+  paymentId: string,
+  paymentMethodId: string
+): Promise<OnboardingChargeResult & { subscriptionId?: string }> {
+  const stripe = getStripe();
+
+  try {
+    const amounts = computeOnboardingAmounts({
+      tier: params.tier,
+      billingOption: params.billingOption,
+      portfolioServiceModel: params.portfolioServiceModel,
+      totalUnits: params.totalUnits,
+      eliteAddonServices: params.eliteAddonServices,
+    });
+
+    // Unlike Checkout Sessions, stripe.subscriptions.create's items[].price_data
+    // requires a real Price object (no inline product_data) — create one
+    // (with an inline throwaway Product via prices.create, which DOES support
+    // that) rather than referencing any pre-existing catalog Price/Product.
+    const price = await stripe.prices.create({
+      currency: 'usd',
+      unit_amount: amounts.recurringUnitCents,
+      recurring: { interval: 'month', interval_count: amounts.isQuarterly ? 3 : 1 },
+      product_data: { name: amounts.recurringName },
+    });
+
+    const subscription = await stripe.subscriptions.create({
+      customer: customerId,
+      items: [{ price: price.id, quantity: amounts.units }],
+      default_payment_method: paymentMethodId,
+      metadata: { rental911_landlord_onboarding_payment_id: paymentId },
+      ...(params.activateNow
+        ? { payment_behavior: 'default_incomplete' as const, expand: ['latest_invoice.payment_intent'] }
+        : { trial_period_days: 30 }),
+    });
+
+    if (params.activateNow) {
+      const invoice = subscription.latest_invoice as Stripe.Invoice | null;
+      const intent = invoice?.payment_intent as Stripe.PaymentIntent | null | undefined;
+      return {
+        ok: true,
+        status: intent?.status ?? subscription.status,
+        requiresAction: intent?.status === 'requires_action',
+        clientSecret: intent?.client_secret ?? null,
+        subscriptionId: subscription.id,
+      };
+    }
+
+    return {
+      ok: true,
+      status: subscription.status,
+      requiresAction: false,
+      clientSecret: null,
+      subscriptionId: subscription.id,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Stripe request failed.';
+    console.error('[landlord-onboarding/subscription] failed:', message);
+    return { ok: false, error: message };
+  }
 }
