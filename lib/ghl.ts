@@ -140,7 +140,11 @@ export async function enrollInWorkflow(
       {
         method: 'POST',
         headers: headers(apiKey!),
-        body: JSON.stringify({ eventStartTime: new Date().toISOString() }),
+        // GHL rejects the standard `Z`-suffixed ISO string (and any
+        // milliseconds) with 422 "must be a date and time with timezone
+        // offset" — confirmed against the real API. It wants an explicit
+        // numeric offset with no fractional seconds, e.g. 2021-06-23T03:30:00+01:00.
+        body: JSON.stringify({ eventStartTime: new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00') }),
       }
     );
     if (!res.ok) throw new Error(`GHL ${res.status}: ${await res.text()}`);
