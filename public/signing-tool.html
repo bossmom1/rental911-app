@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rental911 — Document Signing Portal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/signature_pad/4.1.7/signature_pad.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --blue: #1A5BA6;
+    --blue-light: #d0e0ef;
+    --gold: #F5C518;
+    --dark: #1a1a2e;
+    --gray: #f4f6fa;
+    --border: #dde3ee;
+    --text: #222;
+    --muted: #666;
+    --radius: 10px;
+    --shadow: 0 2px 12px rgba(26,91,166,0.10);
+    --green: #1a7a1a;
+  }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--gray); color: var(--text); min-height: 100vh; }
+
+  /* ── HEADER ─────────────────────────────────────────────────────────── */
+  .header {
+    background: var(--blue);
+    color: white;
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .header-logo { font-size: 22px; font-weight: 800; letter-spacing: 2px; color: var(--gold); }
+  .header-sub { font-size: 12px; opacity: 0.85; }
+  .header-title { font-size: 14px; font-weight: 600; margin-left: auto; opacity: 0.9; }
+
+  /* how-to banner */
+  .how-to-bar {
+    background: #fffbea;
+    border-bottom: 1px solid #ffe082;
+    padding: 9px 24px;
+    font-size: 12px;
+    color: #5a4500;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .how-to-bar strong { color: #3a2e00; }
+
+  /* ── LAYOUT ─────────────────────────────────────────────────────────── */
+  .app { display: flex; flex-direction: column; }
+  .main { display: flex; flex: 1; gap: 0; }
+
+  /* ── SIDEBAR ────────────────────────────────────────────────────────── */
+  .sidebar {
+    width: 310px;
+    min-width: 200px;
+    max-width: 560px;
+    background: white;
+    padding: 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    max-height: calc(100vh - 100px);
+    flex-shrink: 0;
+  }
+
+  /* ── RESIZE HANDLE ──────────────────────────────────────────────────── */
+  .resize-handle {
+    width: 6px;
+    background: var(--border);
+    cursor: col-resize;
+    flex-shrink: 0;
+    position: relative;
+    transition: background 0.15s;
+    z-index: 10;
+  }
+  .resize-handle:hover, .resize-handle.dragging {
+    background: var(--blue);
+  }
+  .resize-handle::after {
+    content: '⋮';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #aaa;
+    font-size: 14px;
+    pointer-events: none;
+    line-height: 1;
+  }
+  .resize-handle:hover::after, .resize-handle.dragging::after {
+    color: white;
+  }
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--blue);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--blue-light);
+    border-radius: var(--radius);
+    padding: 20px 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--gray);
+  }
+  .upload-zone:hover, .upload-zone.drag-over { border-color: var(--blue); background: var(--blue-light); }
+  .upload-zone .icon { font-size: 26px; margin-bottom: 6px; }
+  .upload-zone p { font-size: 12px; color: var(--muted); }
+  .upload-zone strong { color: var(--blue); }
+  #fileInput { display: none; }
+
+  /* Workflow guide */
+  .workflow-steps { display: flex; flex-direction: column; gap: 6px; }
+  .wf-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text);
+  }
+  .wf-num {
+    background: var(--blue);
+    color: white;
+    border-radius: 50%;
+    min-width: 18px;
+    height: 18px;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+  }
+
+  /* Sig pad */
+  .sig-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+  .sig-tab {
+    flex: 1; padding: 6px; border: 1px solid var(--border);
+    background: var(--gray); border-radius: 6px; cursor: pointer;
+    font-size: 12px; font-weight: 600; text-align: center; transition: all 0.2s;
+  }
+  .sig-tab.active { background: var(--blue); color: white; border-color: var(--blue); }
+  .sig-type-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+  .sig-type-tab {
+    flex: 1; padding: 5px; border: 1px solid var(--border);
+    background: white; border-radius: 6px; cursor: pointer;
+    font-size: 11px; text-align: center; transition: all 0.2s;
+  }
+  .sig-type-tab.active { background: var(--gold); border-color: #c9a000; font-weight: 700; }
+  .pad-wrap {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: white;
+    position: relative;
+  }
+  canvas.sig-canvas { width: 100%; height: 90px; display: block; cursor: crosshair; }
+  .type-sig-input {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 22px;
+    font-family: 'Brush Script MT', cursive;
+    border: none;
+    outline: none;
+    height: 90px;
+    display: none;
+    background: white;
+  }
+  .pad-actions { display: flex; gap: 6px; margin-top: 6px; }
+
+  /* Tools */
+  .tools-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
+  .tool-btn {
+    padding: 9px 6px;
+    border: 2px solid var(--border);
+    background: white;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    transition: all 0.2s;
+    color: var(--text);
+  }
+  .tool-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
+  .tool-btn.active { border-color: var(--blue); background: var(--blue); color: white; }
+  .tool-btn.active-fill { border-color: #1a7a1a; background: #1a7a1a; color: white; }
+  .tool-btn.active-check { border-color: #b06000; background: #e68000; color: white; }
+  .tool-btn .tool-icon { font-size: 16px; display: block; margin-bottom: 3px; }
+
+  /* Fields */
+  .field-row { margin-bottom: 8px; }
+  .field-row label { font-size: 11px; font-weight: 600; display: block; margin-bottom: 3px; color: var(--muted); }
+  .field-row input {
+    width: 100%; padding: 7px 10px;
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; outline: none;
+    transition: border 0.2s;
+  }
+  .field-row input:focus { border-color: var(--blue); }
+
+  /* Buttons */
+  .btn {
+    padding: 9px 14px; border: none; border-radius: 8px;
+    font-size: 12px; font-weight: 700; cursor: pointer;
+    transition: all 0.2s; display: inline-flex; align-items: center; gap: 5px;
+  }
+  .btn-primary { background: var(--blue); color: white; }
+  .btn-primary:hover { background: #14478a; }
+  .btn-gold { background: var(--gold); color: #222; }
+  .btn-gold:hover { background: #d4a800; }
+  .btn-sm { padding: 5px 9px; font-size: 11px; }
+  .btn-outline { background: white; border: 1px solid var(--border); color: var(--text); }
+  .btn-outline:hover { border-color: var(--blue); color: var(--blue); }
+  .btn-danger { background: #fee; border: 1px solid #fcc; color: #c00; }
+  .btn-danger:hover { background: #fcc; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-full { width: 100%; justify-content: center; }
+
+  /* Instructions */
+  .instructions {
+    background: var(--blue-light);
+    border-left: 3px solid var(--blue);
+    padding: 9px 11px;
+    border-radius: 0 6px 6px 0;
+    font-size: 11px;
+    color: var(--blue);
+    line-height: 1.5;
+  }
+
+  /* Tool legend */
+  .tool-legend { font-size: 11px; line-height: 1.6; color: var(--muted); margin-top: 8px; }
+  .tool-legend span { font-weight: 700; }
+  .tl-fill { color: var(--green); }
+  .tl-check { color: #b06000; }
+  .tl-sig { color: var(--blue); }
+
+  /* ── PDF VIEWER ─────────────────────────────────────────────────────── */
+  .viewer-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    max-height: calc(100vh - 100px);
+    background: #e8ecf2;
+  }
+  .page-wrap {
+    position: relative;
+    box-shadow: var(--shadow);
+    background: white;
+    border-radius: 2px;
+    cursor: crosshair;
+  }
+  .page-wrap canvas { display: block; }
+  .page-label {
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 5px;
+  }
+
+  /* Placed stamps */
+  .stamp {
+    position: absolute;
+    cursor: move;
+    user-select: none;
+    border: 1.5px dashed rgba(26,91,166,0.35);
+    padding: 2px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.5);
+  }
+  .stamp:hover { border-color: var(--blue); }
+  .stamp img { display: block; max-height: 46px; }
+  .stamp-text  { font-family: 'Brush Script MT', cursive; font-size: 18px; color: #1a1a6e; white-space: nowrap; padding: 2px 4px; }
+  .stamp-date  { font-size: 11px; color: #333; white-space: nowrap; padding: 2px 4px; font-family: Arial; }
+  .stamp-auto-date { font-size: 10px; color: #333; font-family: Arial, sans-serif; text-align: center; margin-top: 2px; white-space: nowrap; }
+  .stamp-field { font-size: 11px; color: #111; white-space: nowrap; padding: 2px 4px; font-family: Arial, sans-serif; }
+  .stamp-check { font-size: 16px; color: #1a5ba6; font-weight: 900; padding: 0 3px; line-height: 1; }
+  .stamp-sign-marker {
+    background: #fff3b0;
+    border: 1.5px solid #f0b800 !important;
+    color: #5a3c00;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: Arial, sans-serif;
+    padding: 3px 7px;
+    white-space: nowrap;
+    border-radius: 3px;
+    letter-spacing: 0.3px;
+  }
+  .stamp-init-marker {
+    background: #fff3b0;
+    border: 1.5px solid #f0b800 !important;
+    color: #5a3c00;
+    font-size: 9px;
+    font-weight: 700;
+    font-family: Arial, sans-serif;
+    padding: 2px 6px;
+    white-space: nowrap;
+    border-radius: 3px;
+    letter-spacing: 0.3px;
+  }
+  .stamp-delete {
+    position: absolute;
+    top: -8px; right: -8px;
+    width: 16px; height: 16px;
+    background: #e00; color: white;
+    border-radius: 50%; font-size: 9px;
+    display: none; align-items: center; justify-content: center;
+    cursor: pointer; font-weight: bold; line-height: 1;
+  }
+  .stamp:hover .stamp-delete { display: flex; }
+
+  /* Inline text input (appears on the PDF when fill-text tool is active) */
+  .inline-text-input {
+    position: absolute;
+    border: 1.5px solid var(--blue);
+    border-radius: 3px;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-family: Arial, sans-serif;
+    color: #111;
+    background: rgba(255,255,255,0.97);
+    outline: none;
+    z-index: 200;
+    min-width: 130px;
+    box-shadow: 0 2px 8px rgba(26,91,166,0.25);
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+  .empty-state .big-icon { font-size: 60px; margin-bottom: 14px; display: block; }
+  .empty-state h3 { font-size: 18px; color: var(--text); margin-bottom: 8px; }
+  .empty-state p { font-size: 13px; }
+
+  /* ── DOWNLOAD BAR ───────────────────────────────────────────────────── */
+  .download-bar {
+    background: white;
+    border-top: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
+    position: sticky;
+    bottom: 0;
+    z-index: 50;
+  }
+  .stamp-count { font-size: 12px; color: var(--muted); }
+  .stamp-count strong { color: var(--blue); }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%);
+    background: var(--green); color: white; padding: 10px 22px;
+    border-radius: 8px; font-weight: 600; font-size: 13px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 9999;
+  }
+  .toast.show { opacity: 1; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5); z-index: 1000;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: white; border-radius: 12px;
+    padding: 28px; max-width: 440px; width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  }
+  .modal h3 { font-size: 17px; margin-bottom: 8px; color: var(--blue); }
+  .modal p { font-size: 12px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div>
+    <div class="header-logo">RENTAL911</div>
+    <div class="header-sub">DIY Landlord Education & Consulting</div>
+  </div>
+  <div class="header-title">📄 Document Signing &amp; Preparation Portal</div>
+</div>
+
+<!-- HOW-TO BANNER -->
+<div class="how-to-bar">
+  💡 <strong>How to open this tool:</strong> Save the file to your computer, then double-click it to open in Chrome or Edge. Everything runs directly in your browser — no login or internet required after it loads.
+</div>
+
+<div class="app">
+  <div class="main">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar" id="sidebar">
+
+      <!-- Step 1: Upload -->
+      <div>
+        <div class="section-label">Step 1 — Upload Your PDF</div>
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+          <div class="icon">📂</div>
+          <p><strong>Click to upload</strong> or drag &amp; drop</p>
+          <p style="margin-top:3px;">PDF files only</p>
+        </div>
+        <input type="file" id="fileInput" accept=".pdf">
+      </div>
+
+      <!-- Workflow guide -->
+      <div>
+        <div class="section-label">How This Works</div>
+        <div class="workflow-steps">
+          <div class="wf-step">
+            <div class="wf-num">1</div>
+            <div><strong>Prepare (you):</strong> Upload the agreement. Use <span style="color:var(--green);font-weight:700;">Fill Text</span> to type into blank fields, <span style="color:#b06000;font-weight:700;">✓ Check</span> to tick service boxes. Download the filled PDF.</div>
+          </div>
+          <div class="wf-step">
+            <div class="wf-num">2</div>
+            <div><strong>Sign (you):</strong> Create your signature &amp; initials below. Use the Signature/Initials/Date tools to place them on the document.</div>
+          </div>
+          <div class="wf-step">
+            <div class="wf-num">3</div>
+            <div><strong>Send to customer:</strong> Download the prepared PDF, email it along with this tool. They open the tool in their browser, sign, and send the signed PDF back to you.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Signature Setup -->
+      <div>
+        <div class="section-label">Step 2 — Create Signature &amp; Initials</div>
+        <div class="sig-tabs">
+          <div class="sig-tab active" onclick="switchSigTab('sig')">Signature</div>
+          <div class="sig-tab" onclick="switchSigTab('init')">Initials</div>
+        </div>
+        <div class="sig-type-tabs">
+          <div class="sig-type-tab active" id="drawTab" onclick="switchSigType('draw')">✏️ Draw</div>
+          <div class="sig-type-tab" id="typeTab" onclick="switchSigType('type')">⌨️ Type</div>
+        </div>
+        <div class="pad-wrap">
+          <canvas class="sig-canvas" id="sigCanvas"></canvas>
+          <input class="type-sig-input" id="typeSigInput" placeholder="Type signature here..." oninput="updateTypedSig()">
+        </div>
+        <div class="pad-actions">
+          <button class="btn btn-sm btn-outline" onclick="clearCurrentPad()">🗑 Clear</button>
+          <button class="btn btn-sm btn-primary" onclick="saveSig()" style="margin-left:auto;">✓ Save</button>
+        </div>
+        <div id="sigSaved" style="display:none;margin-top:7px;font-size:12px;color:var(--green);font-weight:600;">✓ Saved! Select the tool below to place it.</div>
+      </div>
+
+      <!-- Signer Info -->
+      <div>
+        <div class="section-label">Your Information</div>
+        <div class="field-row">
+          <label>Full Name</label>
+          <input type="text" id="signerName" placeholder="Your full name">
+        </div>
+        <div class="field-row">
+          <label>Date</label>
+          <input type="date" id="signerDate">
+        </div>
+        <div class="field-row">
+          <label>Email</label>
+          <input type="email" id="signerEmail" placeholder="your@email.com">
+        </div>
+      </div>
+
+      <!-- Step 3: Tools -->
+      <div>
+        <div class="section-label">Step 3 — Select Tool → Click on Document</div>
+
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;">Fill Document</div>
+        <div class="tools-grid" style="margin-bottom:10px;">
+          <div class="tool-btn" id="tool-fill" onclick="selectTool('fill')">
+            <span class="tool-icon">✏️</span>Fill Text
+          </div>
+          <div class="tool-btn" id="tool-check" onclick="selectTool('check')">
+            <span class="tool-icon">☑️</span>✓ Check
+          </div>
+          <div class="tool-btn" id="tool-date" onclick="selectTool('date')">
+            <span class="tool-icon">📅</span>Date
+          </div>
+        </div>
+
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;">Your Stamps</div>
+        <div class="tools-grid" style="margin-bottom:10px;">
+          <div class="tool-btn" id="tool-sig" onclick="selectTool('sig')">
+            <span class="tool-icon">✍️</span>Signature
+          </div>
+          <div class="tool-btn" id="tool-init" onclick="selectTool('init')">
+            <span class="tool-icon">🖊️</span>Initials
+          </div>
+          <div class="tool-btn" id="tool-name" onclick="selectTool('name')">
+            <span class="tool-icon">👤</span>Full Name
+          </div>
+        </div>
+
+        <div style="font-size:10px;font-weight:700;color:#b06000;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px;">Other Party Markers</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.4;">Drop these where <strong>the other party</strong> needs to sign or initial. They appear as yellow markers in the PDF.</div>
+        <div class="tools-grid" style="grid-template-columns:1fr 1fr;margin-bottom:10px;">
+          <div class="tool-btn" id="tool-sign-marker" onclick="selectTool('sign-marker')" style="background:#fffbea;border-color:#f0b800;color:#5a3c00;">
+            <span class="tool-icon">📌</span>Sign Here ↓
+          </div>
+          <div class="tool-btn" id="tool-init-marker" onclick="selectTool('init-marker')" style="background:#fffbea;border-color:#f0b800;color:#5a3c00;">
+            <span class="tool-icon">📍</span>Initial Here ↓
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4: Download & Send -->
+      <div style="background:#f0f7ff;border:1.5px solid var(--blue-light);border-radius:10px;padding:14px 12px;">
+        <div class="section-label" style="margin-bottom:8px;">Step 4 — Download &amp; Send</div>
+        <p style="font-size:11px;color:var(--text);line-height:1.5;margin-bottom:10px;">
+          When done: click <strong>Download</strong> to save the PDF to your computer first. Then email that file to your customer — use <strong>Send by Email</strong> to open your email client (you attach the PDF yourself).
+        </p>
+        <p style="font-size:11px;color:var(--muted);line-height:1.5;">
+          Your progress is <strong>auto-saved</strong> as you work. Re-upload the same PDF next time and your stamps restore automatically.
+        </p>
+        <div id="saveIndicator" style="font-size:11px;color:var(--green);margin-top:6px;opacity:0;transition:opacity 0.4s;font-weight:600;"></div>
+      </div>
+
+      <!-- Clear all -->
+      <div style="display:flex;gap:8px;margin-top:auto;">
+        <button class="btn btn-outline btn-full btn-sm" onclick="clearAllStamps()" style="flex:1;">🗑 Remove Stamps</button>
+        <button class="btn btn-outline btn-sm" onclick="clearSavedSession()" title="Clear saved session from browser" style="flex:1;color:#c00;border-color:#fcc;">🗑 Clear Saved</button>
+      </div>
+
+    </div>
+
+    <!-- RESIZE HANDLE -->
+    <div class="resize-handle" id="resizeHandle"></div>
+
+    <!-- PDF VIEWER -->
+    <div class="viewer-wrap" id="viewerWrap">
+      <div class="empty-state" id="emptyState">
+        <span class="big-icon">📋</span>
+        <h3>No document loaded</h3>
+        <p>Upload a PDF using the panel on the left<br>to begin preparing or signing.</p>
+      </div>
+      <div id="pdfPages"></div>
+    </div>
+
+  </div>
+
+  <!-- DOWNLOAD BAR -->
+  <div class="download-bar">
+    <div class="stamp-count" id="stampCount">No stamps placed yet.</div>
+    <button class="btn btn-gold" id="downloadBtn" onclick="downloadSigned()" disabled>
+      ⬇️ Download Completed PDF
+    </button>
+    <button class="btn btn-outline btn-sm" onclick="showEmailModal()" id="emailBtn" disabled>
+      📧 Send by Email
+    </button>
+    <div style="margin-left:auto;font-size:11px;color:var(--muted);">
+      Rental911 — rental911.net
+    </div>
+  </div>
+</div>
+
+<!-- EMAIL MODAL -->
+<div class="modal-overlay" id="emailModal">
+  <div class="modal">
+    <h3>📧 Send Document</h3>
+    <p>Download the completed PDF first (yellow button), then click <strong>Open Gmail</strong> — it opens a pre-filled compose window. Attach the PDF before sending.</p>
+    <div class="field-row">
+      <label>Send to</label>
+      <input type="text" id="sendToEmail" placeholder="recipient@email.com">
+    </div>
+    <div class="field-row">
+      <label>Subject</label>
+      <input type="text" id="emailSubject" placeholder="Rental911 Consulting Agreement — [Name]">
+    </div>
+    <div class="field-row">
+      <label>Message (optional)</label>
+      <input type="text" id="emailMsg" placeholder="Please review, sign, and return the attached agreement.">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="openGmail()">📬 Open Gmail</button>
+      <button class="btn btn-outline" onclick="document.getElementById('emailModal').classList.remove('show')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const SCALE = 1.5;
+const STORAGE_KEY = 'r911_signing_session';
+
+// ── STATE ───────────────────────────────────────────────────────────────────
+let pdfDoc    = null;
+let pdfBytes  = null;
+let pages     = [];      // { wrap, canvas, pageNum, pdfPage, viewport }
+let stamps    = [];      // { pageNum, x, y, type, content, el, wrap }
+let currentTool  = null;
+let activeSigTab = 'sig';
+let activeSigType = 'draw';
+let sigPads   = {};
+let savedSig  = null;
+let savedInit = null;
+let currentPdfName = '';
+
+// ── UPLOAD ──────────────────────────────────────────────────────────────────
+const uploadZone = document.getElementById('uploadZone');
+const fileInput  = document.getElementById('fileInput');
+
+uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type === 'application/pdf') loadPDF(file);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadPDF(fileInput.files[0]); });
+
+async function loadPDF(file) {
+  // Store as Uint8Array so it never gets detached by PDF.js
+  const raw = await file.arrayBuffer();
+  pdfBytes = new Uint8Array(raw);
+  // Pass a copy to PDF.js so it can't transfer/detach our stored copy
+  pdfDoc = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise;
+
+  document.getElementById('emptyState').style.display = 'none';
+  const container = document.getElementById('pdfPages');
+  container.innerHTML = '';
+  pages  = [];
+  stamps = [];
+  updateStampCount();
+
+  for (let i = 1; i <= pdfDoc.numPages; i++) {
+    const pdfPage = await pdfDoc.getPage(i);
+    const viewport = pdfPage.getViewport({ scale: SCALE });
+
+    const wrap = document.createElement('div');
+    wrap.className = 'page-wrap';
+    wrap.style.width  = viewport.width  + 'px';
+    wrap.style.height = viewport.height + 'px';
+    wrap.dataset.page = i;
+
+    const canvas = document.createElement('canvas');
+    canvas.width  = viewport.width;
+    canvas.height = viewport.height;
+    await pdfPage.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+    wrap.appendChild(canvas);
+    wrap.addEventListener('click', onPageClick);
+
+    const label = document.createElement('div');
+    label.className = 'page-label';
+    label.textContent = `Page ${i} of ${pdfDoc.numPages}`;
+
+    const group = document.createElement('div');
+    group.appendChild(wrap);
+    group.appendChild(label);
+    container.appendChild(group);
+
+    pages.push({ wrap, canvas, pageNum: i, pdfPage, viewport });
+  }
+
+  currentPdfName = file.name;
+  uploadZone.innerHTML = `<div class="icon">✅</div><p><strong>${file.name}</strong></p><p style="margin-top:3px;">${pdfDoc.numPages} page(s) loaded — select a tool and click the document</p>`;
+  document.getElementById('signerDate').value = new Date().toISOString().split('T')[0];
+  // Enable Download + Email as soon as PDF is loaded
+  document.getElementById('downloadBtn').disabled = false;
+  document.getElementById('emailBtn').disabled    = false;
+  toast('Document loaded! Select a tool from the left panel to begin.');
+  // Restore saved stamps for this PDF if available
+  restoreStampsForPdf(file.name);
+}
+
+// ── SIGNATURE PADS ──────────────────────────────────────────────────────────
+function initPads() {
+  const canvas = document.getElementById('sigCanvas');
+  canvas.width  = canvas.offsetWidth || 274;
+  canvas.height = 90;
+  sigPads.sig  = new SignaturePad(canvas, { penColor: '#1a1a6e', minWidth: 1.5, maxWidth: 2.5 });
+  sigPads.init = new SignaturePad(canvas, { penColor: '#1a1a6e', minWidth: 1.5, maxWidth: 2.5 });
+  sigPads.current = sigPads.sig;
+  sigPads.current.on();
+}
+window.addEventListener('load', initPads);
+
+function switchSigTab(tab) {
+  activeSigTab = tab;
+  document.querySelectorAll('.sig-tab').forEach((el, i) =>
+    el.classList.toggle('active', (i===0 && tab==='sig') || (i===1 && tab==='init')));
+  sigPads.current?.off();
+  sigPads.current = sigPads[tab];
+  sigPads.current.on();
+  document.getElementById('sigSaved').style.display = 'none';
+}
+
+function switchSigType(type) {
+  activeSigType = type;
+  document.getElementById('drawTab').classList.toggle('active', type === 'draw');
+  document.getElementById('typeTab').classList.toggle('active', type === 'type');
+  const canvas = document.getElementById('sigCanvas');
+  const input  = document.getElementById('typeSigInput');
+  if (type === 'draw') {
+    canvas.style.display = 'block'; input.style.display = 'none';
+    sigPads.current.on();
+  } else {
+    canvas.style.display = 'none'; input.style.display = 'block';
+    sigPads.current.off();
+  }
+}
+
+function updateTypedSig() { /* live preview placeholder */ }
+
+function clearCurrentPad() {
+  if (activeSigType === 'draw') { sigPads.current?.clear(); }
+  else { document.getElementById('typeSigInput').value = ''; }
+  document.getElementById('sigSaved').style.display = 'none';
+}
+
+function saveSig() {
+  let dataUrl;
+  if (activeSigType === 'draw') {
+    if (sigPads.current.isEmpty()) { toast('Please draw your ' + (activeSigTab==='sig'?'signature':'initials') + ' first.', true); return; }
+    dataUrl = sigPads.current.toDataURL('image/png');
+  } else {
+    const text = document.getElementById('typeSigInput').value.trim();
+    if (!text) { toast('Please type your ' + (activeSigTab==='sig'?'signature':'initials') + ' first.', true); return; }
+    dataUrl = textToDataUrl(text, activeSigTab==='sig' ? 34 : 28);
+  }
+  if (activeSigTab === 'sig') savedSig  = dataUrl;
+  else                         savedInit = dataUrl;
+  document.getElementById('sigSaved').style.display = 'block';
+  toast((activeSigTab==='sig'?'Signature':'Initials') + ' saved! Now select the tool and click on the document.');
+  autoSave();
+}
+
+function textToDataUrl(text, fontSize) {
+  const c = document.createElement('canvas');
+  c.width  = Math.max(50, fontSize * text.length * 0.6 + 20);
+  c.height = fontSize * 1.6;
+  const ctx = c.getContext('2d');
+  ctx.font = `${fontSize}px "Brush Script MT", cursive`;
+  ctx.fillStyle = '#1a1a6e';
+  ctx.fillText(text, 8, fontSize * 1.2);
+  return c.toDataURL('image/png');
+}
+
+// ── TOOL SELECTION ───────────────────────────────────────────────────────────
+function selectTool(tool) {
+  currentTool = tool;
+  document.querySelectorAll('.tool-btn').forEach(b => {
+    b.classList.remove('active', 'active-fill', 'active-check');
+    // reset inline overrides for marker buttons
+    if (b.id === 'tool-sign-marker' || b.id === 'tool-init-marker') {
+      b.style.background = '#fffbea';
+      b.style.borderColor = '#f0b800';
+      b.style.color = '#5a3c00';
+    }
+  });
+  const btn = document.getElementById('tool-' + tool);
+  if (btn) {
+    if (tool === 'fill')  btn.classList.add('active-fill');
+    else if (tool === 'check') btn.classList.add('active-check');
+    else if (tool === 'sign-marker' || tool === 'init-marker') {
+      btn.style.background = '#f0b800';
+      btn.style.borderColor = '#c98f00';
+      btn.style.color = '#3a2800';
+      btn.style.fontWeight = '700';
+    } else btn.classList.add('active');
+  }
+}
+
+// ── PLACE STAMP ──────────────────────────────────────────────────────────────
+function onPageClick(e) {
+  // Don't fire if clicking on an existing stamp or its children
+  if (e.target.closest('.stamp')) return;
+  if (!pdfDoc) return;
+  if (!currentTool) { toast('Select a tool first from the left panel.', true); return; }
+
+  const wrap    = e.currentTarget;
+  const rect    = wrap.getBoundingClientRect();
+  const x       = e.clientX - rect.left;
+  const y       = e.clientY - rect.top;
+  const pageNum = parseInt(wrap.dataset.page);
+
+  if (currentTool === 'fill') {
+    showInlineTextInput(wrap, x, y, pageNum);
+    return; // stamp placed after text is entered
+  }
+
+  let content, type;
+
+  if (currentTool === 'sign-marker') {
+    content = '▶ SIGN HERE'; type = 'sign-marker';
+  } else if (currentTool === 'init-marker') {
+    content = '▶ INITIAL HERE'; type = 'init-marker';
+  } else if (currentTool === 'check') {
+    content = '✓'; type = 'check';
+  } else if (currentTool === 'sig') {
+    if (!savedSig)  { toast('Save your signature first (Step 2 in the sidebar)', true); return; }
+    content = savedSig; type = 'image';
+  } else if (currentTool === 'init') {
+    if (!savedInit) { toast('Save your initials first (Step 2 in the sidebar)', true); return; }
+    content = savedInit; type = 'image';
+  } else if (currentTool === 'date') {
+    const d = document.getElementById('signerDate').value;
+    content = d
+      ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })
+      : new Date().toLocaleDateString();
+    type = 'date';
+  } else if (currentTool === 'name') {
+    content = document.getElementById('signerName').value.trim() || 'Signer Name';
+    type = 'name';
+  }
+
+  placeStamp(wrap, x, y, pageNum, type, content);
+}
+
+// Show an inline text input on the PDF page so the user can type a field value
+function showInlineTextInput(wrap, x, y, pageNum) {
+  // Remove any existing inline input
+  const existing = wrap.querySelector('.inline-text-input');
+  if (existing) wrap.removeChild(existing);
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'inline-text-input';
+  input.placeholder = 'Type here, press Enter';
+  input.style.left = Math.max(0, x - 4) + 'px';
+  input.style.top  = Math.max(0, y - 12) + 'px';
+  wrap.appendChild(input);
+  input.focus();
+
+  let committed = false;
+
+  const commit = () => {
+    if (committed) return;
+    committed = true;
+    const text = input.value.trim();
+    if (input.parentNode === wrap) wrap.removeChild(input);
+    if (text) placeStamp(wrap, x, y, pageNum, 'field', text);
+  };
+
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') { committed = true; if (input.parentNode === wrap) wrap.removeChild(input); }
+  });
+
+  // Commit on blur, but give a small delay so Enter can fire first
+  input.addEventListener('blur', () => setTimeout(commit, 150));
+
+  // Stop clicks inside the input from bubbling to the page
+  input.addEventListener('click', e => e.stopPropagation());
+}
+
+function placeStamp(wrap, x, y, pageNum, type, content) {
+  const el = document.createElement('div');
+  el.className = 'stamp';
+
+  if (type === 'image') {
+    const img = document.createElement('img');
+    img.src = content;
+    el.appendChild(img);
+
+    // Auto-add date below signature/initials stamp
+    const today = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+    const dateEl = document.createElement('div');
+    dateEl.className = 'stamp-auto-date';
+    dateEl.textContent = today;
+    el.appendChild(dateEl);
+  } else {
+    const span = document.createElement('span');
+    if (type === 'date')        span.className = 'stamp-date';
+    else if (type === 'field')  span.className = 'stamp-field';
+    else if (type === 'check')  span.className = 'stamp-check';
+    else if (type === 'sign-marker') span.className = 'stamp-sign-marker';
+    else if (type === 'init-marker') span.className = 'stamp-init-marker';
+    else                        span.className = 'stamp-text'; // name (cursive)
+    span.textContent = content;
+    el.appendChild(span);
+  }
+
+  const del = document.createElement('div');
+  del.className = 'stamp-delete';
+  del.textContent = '×';
+  el.appendChild(del);
+
+  const offsetX = (type === 'check' || type === 'sign-marker' || type === 'init-marker') ? 2 : 30;
+  const offsetY = (type === 'check' || type === 'sign-marker' || type === 'init-marker') ? 2 : (type === 'field' ? 10 : 20);
+  el.style.left = (x - offsetX) + 'px';
+  el.style.top  = (y - offsetY) + 'px';
+  wrap.appendChild(el);
+
+  const stamp = { pageNum, x, y, type, content, el, wrap };
+  stamps.push(stamp);
+
+  del.addEventListener('click', e => {
+    e.stopPropagation();
+    wrap.removeChild(el);
+    stamps.splice(stamps.indexOf(stamp), 1);
+    updateStampCount();
+    autoSave();
+  });
+
+  makeDraggable(el, wrap, stamp);
+  updateStampCount();
+  autoSave();
+}
+
+function makeDraggable(el, wrap, stamp) {
+  let startX, startY, startL, startT;
+  el.addEventListener('mousedown', e => {
+    if (e.target.className === 'stamp-delete') return;
+    e.stopPropagation();
+    startX = e.clientX; startY = e.clientY;
+    startL = parseInt(el.style.left) || 0;
+    startT = parseInt(el.style.top)  || 0;
+    const onMove = ev => {
+      el.style.left = (startL + ev.clientX - startX) + 'px';
+      el.style.top  = (startT + ev.clientY - startY) + 'px';
+      stamp.x = (startL + ev.clientX - startX) + 30;
+      stamp.y = (startT + ev.clientY - startY) + 20;
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup',   onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup',   onUp);
+  });
+}
+
+function clearAllStamps() {
+  stamps.forEach(s => { try { s.wrap.removeChild(s.el); } catch(e){} });
+  stamps = [];
+  updateStampCount();
+}
+
+function updateStampCount() {
+  const count = stamps.length;
+  document.getElementById('stampCount').innerHTML = count
+    ? `<strong>${count}</strong> stamp${count > 1 ? 's' : ''} placed`
+    : 'No stamps placed yet.';
+  // Buttons activate as soon as a PDF is loaded — stamps not required
+  const pdfLoaded = !!pdfDoc;
+  document.getElementById('downloadBtn').disabled = !pdfLoaded;
+  document.getElementById('emailBtn').disabled    = !pdfLoaded;
+}
+
+// ── DOWNLOAD COMPLETED PDF ───────────────────────────────────────────────────
+async function downloadSigned() {
+  if (!pdfBytes) { toast('No document loaded', true); return; }
+  toast('Generating PDF…');
+
+  try {
+    const { PDFDocument, rgb, StandardFonts } = PDFLib;
+    const pdfLibDoc  = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+
+    // Helper: convert data URL to Uint8Array without fetch()
+    function dataUrlToBytes(dataUrl) {
+      const base64 = dataUrl.split(',')[1];
+      const binary = atob(base64);
+      const bytes  = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes;
+    }
+    const pdfLibPages = pdfLibDoc.getPages();
+
+    // Embed fonts
+    const helvetica = await pdfLibDoc.embedFont(StandardFonts.Helvetica);
+    const helveticaB = await pdfLibDoc.embedFont(StandardFonts.HelveticaBold);
+
+    for (const stamp of stamps) {
+      const page   = pdfLibPages[stamp.pageNum - 1];
+      const { width, height } = page.getSize();
+      const pageObj = pages.find(p => p.pageNum === stamp.pageNum);
+      const scale   = pageObj ? pageObj.viewport.scale : SCALE;
+
+      const pdfX = stamp.x / scale;
+      const pdfY = height - (stamp.y / scale);
+
+      if (stamp.type === 'image') {
+        try {
+          const imgBytes = dataUrlToBytes(stamp.content);
+          const pdfImage = await pdfLibDoc.embedPng(imgBytes);
+          const dims     = pdfImage.scaleToFit(110, 38);
+          page.drawImage(pdfImage, {
+            x: pdfX - dims.width / 2,
+            y: pdfY - dims.height / 2,
+            width: dims.width, height: dims.height
+          });
+          // Auto-embed date below signature
+          const today = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+          page.drawText(today, {
+            x: pdfX - dims.width / 2,
+            y: pdfY - dims.height / 2 - 12,
+            size: 8, font: helvetica,
+            color: rgb(0.2, 0.2, 0.2)
+          });
+        } catch(e) { console.error('Image embed error', e); }
+
+      } else if (stamp.type === 'field') {
+        page.drawText(stamp.content, {
+          x: pdfX, y: pdfY,
+          size: 10, font: helvetica,
+          color: rgb(0, 0, 0)
+        });
+
+      } else if (stamp.type === 'sign-marker' || stamp.type === 'init-marker') {
+        const isSign  = stamp.type === 'sign-marker';
+        const label   = isSign ? '> SIGN HERE' : '> INITIAL HERE';
+        const rectW   = isSign ? 72 : 68;
+        const rectH   = 14;
+        page.drawRectangle({
+          x: pdfX, y: pdfY - rectH,
+          width: rectW, height: rectH,
+          color: rgb(1, 0.95, 0.4),
+          borderColor: rgb(0.94, 0.72, 0.08),
+          borderWidth: 1,
+          opacity: 0.9,
+        });
+        page.drawText(label, {
+          x: pdfX + 3, y: pdfY - rectH + 3,
+          size: 8, font: helveticaB,
+          color: rgb(0.32, 0.22, 0),
+        });
+
+      } else if (stamp.type === 'check') {
+        page.drawText('X', {
+          x: pdfX, y: pdfY,
+          size: 11, font: helveticaB,
+          color: rgb(0.1, 0.35, 0.65)
+        });
+
+      } else if (stamp.type === 'date') {
+        page.drawText(stamp.content, {
+          x: pdfX, y: pdfY,
+          size: 9, font: helvetica,
+          color: rgb(0.1, 0.1, 0.4)
+        });
+
+      } else if (stamp.type === 'name') {
+        page.drawText(stamp.content, {
+          x: pdfX, y: pdfY,
+          size: 11, font: helvetica,
+          color: rgb(0.1, 0.1, 0.4)
+        });
+      }
+    }
+
+    const signedBytes = await pdfLibDoc.save();
+    const blob = new Blob([signedBytes], { type: 'application/pdf' });
+    const url  = URL.createObjectURL(blob);
+    const name = document.getElementById('signerName').value.trim().replace(/\s+/g, '_') || 'Completed';
+    const fileName = `Rental911_Document_${name}.pdf`;
+
+    // Attach to DOM before clicking — required for iframe contexts
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // Fallback: if blob download is blocked, open in new tab so user can Ctrl+S
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 3000);
+
+    toast('✅ PDF downloaded! If the file didn\'t appear, check your Downloads folder or use Ctrl+S on the PDF that opened.');
+  } catch(err) {
+    console.error('PDF generation error:', err);
+    toast('Error: ' + (err && err.message ? err.message : String(err)), true);
+  }
+}
+
+// ── EMAIL MODAL ──────────────────────────────────────────────────────────────
+function showEmailModal() {
+  const name  = document.getElementById('signerName').value || 'Customer';
+  const email = document.getElementById('signerEmail').value || '';
+
+  // Auto-fill recipient from signer email field
+  const toField = document.getElementById('sendToEmail');
+  if (toField && !toField.value && email) toField.value = email;
+
+  // Auto-fill subject
+  const subjField = document.getElementById('emailSubject');
+  if (subjField && !subjField.value) {
+    subjField.value = `Rental911 Consulting Agreement & Invoice — Action Required`;
+  }
+
+  document.getElementById('emailModal').classList.add('show');
+}
+
+function openGmail() {
+  const to      = document.getElementById('sendToEmail').value.trim();
+  const name    = document.getElementById('signerName').value || 'Customer';
+  const firstName = name.split(' ')[0] || name;
+  const subject = document.getElementById('emailSubject').value ||
+                  `Rental911 Consulting Agreement & Invoice — Action Required`;
+  const customMsg = document.getElementById('emailMsg').value;
+
+  const body =
+    `Hi ${firstName},\n\n` +
+    (customMsg ? customMsg + '\n\n' : `Your Rental911 Consulting Agreement and Invoice are attached to this email. Please review them at your earliest convenience.\n\n`) +
+    `TWO THINGS TO COMPLETE:\n\n` +
+    `① PAY YOUR INVOICE — $350.00\n` +
+    `   Pay securely here: https://buy.stripe.com/3cIaEQe2k0eigtEfeQ57W00\n\n` +
+    `② SIGN THE AGREEMENT\n` +
+    `   Open the attached "signing-tool.html" file in Chrome, load the agreement PDF, sign where the yellow markers show, and email the signed copy back to ppgdropbox@gmail.com.\n\n` +
+    `Work begins as soon as payment is confirmed. Your completed documents will be delivered within 3–5 business days.\n\n` +
+    `Questions? Just reply to this email — I'm happy to help.\n\n` +
+    `Christine Pollard\nRental911 | rental911.net\nLicensed Maryland Realtor — Samson Properties\nppgdropbox@gmail.com`;
+
+  const gmailUrl = `https://mail.google.com/mail/?view=cm` +
+    `&to=${encodeURIComponent(to)}` +
+    `&su=${encodeURIComponent(subject)}` +
+    `&body=${encodeURIComponent(body)}`;
+
+  window.open(gmailUrl, '_blank');
+  document.getElementById('emailModal').classList.remove('show');
+}
+
+// ── AUTO-SAVE / RESTORE ──────────────────────────────────────────────────────
+function autoSave() {
+  try {
+    const data = {
+      v: 2,
+      pdfName: currentPdfName,
+      savedAt: new Date().toISOString(),
+      signerName:  document.getElementById('signerName').value,
+      signerDate:  document.getElementById('signerDate').value,
+      signerEmail: document.getElementById('signerEmail').value,
+      savedSig:  savedSig  || null,
+      savedInit: savedInit || null,
+      stamps: stamps.map(s => ({
+        pageNum: s.pageNum,
+        x: s.x, y: s.y,
+        type: s.type,
+        content: s.type === 'image' ? null : s.content,
+        sigDataUrl: s.type === 'image' ? s.content : null,
+      }))
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    showSaveIndicator();
+  } catch(e) { /* localStorage not available — skip silently */ }
+}
+
+function showSaveIndicator() {
+  const el = document.getElementById('saveIndicator');
+  if (!el) return;
+  el.textContent = '✓ Progress saved';
+  el.style.opacity = '1';
+  setTimeout(() => { el.style.opacity = '0'; }, 2000);
+}
+
+function restoreStampsForPdf(pdfName) {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data.pdfName !== pdfName || !data.stamps || !data.stamps.length) return;
+
+    // Restore signer info
+    if (data.signerName)  document.getElementById('signerName').value  = data.signerName;
+    if (data.signerDate)  document.getElementById('signerDate').value  = data.signerDate;
+    if (data.signerEmail) document.getElementById('signerEmail').value = data.signerEmail;
+    if (data.savedSig)  { savedSig  = data.savedSig;  }
+    if (data.savedInit) { savedInit = data.savedInit; }
+
+    // Re-place each saved stamp
+    data.stamps.forEach(s => {
+      const pageObj = pages.find(p => p.pageNum === s.pageNum);
+      if (!pageObj) return;
+      const content = s.type === 'image' ? s.sigDataUrl : s.content;
+      if (!content) return;
+      placeStamp(pageObj.wrap, s.x, s.y, s.pageNum, s.type, content);
+    });
+
+    const savedAt = data.savedAt ? new Date(data.savedAt).toLocaleString() : '';
+    toast(`✅ Session restored — ${data.stamps.length} stamp(s) from ${savedAt}`);
+    document.getElementById('saveIndicator').textContent = `Session restored from ${savedAt}`;
+    document.getElementById('saveIndicator').style.opacity = '1';
+  } catch(e) { /* ignore */ }
+}
+
+function clearSavedSession() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+  toast('Saved session cleared.');
+  document.getElementById('saveIndicator').textContent = '';
+}
+
+// ── RESIZABLE SIDEBAR ────────────────────────────────────────────────────────
+(function() {
+  const handle  = document.getElementById('resizeHandle');
+  const sidebar = document.getElementById('sidebar');
+  let dragging  = false;
+  let startX, startW;
+
+  handle.addEventListener('mousedown', e => {
+    dragging = true;
+    startX   = e.clientX;
+    startW   = sidebar.getBoundingClientRect().width;
+    handle.classList.add('dragging');
+    document.body.style.cursor     = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const delta    = e.clientX - startX;
+    const newWidth = Math.min(560, Math.max(200, startW + delta));
+    sidebar.style.width    = newWidth + 'px';
+    sidebar.style.minWidth = newWidth + 'px';
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.cursor     = '';
+    document.body.style.userSelect = '';
+  });
+})();
+
+// ── TOAST ────────────────────────────────────────────────────────────────────
+function toast(msg, isError) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = isError ? '#c00' : 'var(--green)';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3200);
+}
+</script>
+</body>
+</html>
