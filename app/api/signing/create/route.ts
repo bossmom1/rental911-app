@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
   const signerName    = (formData.get('signerName')   as string | null)?.trim();
   const signerEmail   = (formData.get('signerEmail')  as string | null)?.trim();
   const documentTitle = (formData.get('documentTitle') as string | null)?.trim();
+  const emailNote     = (formData.get('emailNote')    as string | null)?.trim() || '';
 
   if (!file || !signerName || !signerEmail || !documentTitle) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -75,13 +76,22 @@ export async function POST(request: NextRequest) {
     from: FROM_EMAIL,
     to: signerEmail,
     subject: `Action Required: Please sign "${documentTitle}"`,
-    html: buildSigningEmail(signerName, documentTitle, signingUrl),
+    html: buildSigningEmail(signerName, documentTitle, signingUrl, emailNote),
   }).catch(err => console.error('[signing/create] Email error:', err));
 
   return NextResponse.json({ token, signingUrl });
 }
 
-function buildSigningEmail(name: string, title: string, url: string): string {
+function buildSigningEmail(name: string, title: string, url: string, note: string): string {
+  const noteBlock = note
+    ? `<div style="background:#EBF3FF;border-left:4px solid #1A5BA6;padding:16px 20px;border-radius:0 8px 8px 0;margin:0 0 28px;">
+         <p style="margin:0;font-size:14px;color:#333;line-height:1.7;white-space:pre-wrap;">${note.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
+       </div>`
+    : '';
+  return buildSigningEmailHtml(name, title, url, noteBlock);
+}
+
+function buildSigningEmailHtml(name: string, title: string, url: string, noteBlock: string): string {
   return `<!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f4f4f4;">
@@ -103,6 +113,7 @@ function buildSigningEmail(name: string, title: string, url: string): string {
         Christine Pollard has sent you a document for your signature:
         <strong style="color:#222;">${title}</strong>
       </p>
+      ${noteBlock}
       <p style="font-size:15px;color:#444;line-height:1.6;margin:0 0 28px;">
         Click the button below to review and sign. No account or download required —
         everything happens right in your browser.

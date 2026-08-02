@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 
 type Field = {
   id: string;
-  type: 'signature' | 'initials' | 'date';
+  type: 'signature' | 'initials' | 'date' | 'text';
   page: number;
   xPct: number;
   yPct: number;
@@ -22,6 +22,7 @@ const FIELD_COLORS: Record<Field['type'], string> = {
   signature: '#1A5BA6',
   initials:  '#2E7D32',
   date:      '#E65100',
+  text:      '#6B21A8',
 };
 
 export default function SignClient({ token, pdfUrl, fields, signerName, documentTitle }: Props) {
@@ -31,6 +32,7 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
   const [filledFields, setFilledFields]   = useState<Record<string, string>>({});  // fieldId → data URL or text
   const [modalField, setModalField]       = useState<Field | null>(null);
   const [initialsText, setInitialsText]   = useState('');
+  const [textValue, setTextValue]         = useState('');
   const [submitting, setSubmitting]       = useState(false);
   const [submitted, setSubmitted]         = useState(false);
   const [error, setError]                 = useState('');
@@ -118,6 +120,7 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
     if (f.type === 'date') return;   // auto-filled
     setModalField(f);
     setInitialsText('');
+    setTextValue('');
   };
 
   const confirmField = () => {
@@ -129,6 +132,9 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
     } else if (modalField.type === 'initials') {
       if (!initialsText.trim()) { setError('Please enter your initials.'); return; }
       setFilledFields(prev => ({ ...prev, [modalField.id]: initialsText.trim().toUpperCase() }));
+    } else if (modalField.type === 'text') {
+      if (!textValue.trim()) { setError('Please enter some text.'); return; }
+      setFilledFields(prev => ({ ...prev, [modalField.id]: textValue.trim() }));
     }
     setError('');
     setModalField(null);
@@ -171,6 +177,8 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
           pageObj.drawText(value, { x: pdfX - 12, y: pdfY - 8, size: 14, font: helvetica, color: rgb(0, 0, 0) });
         } else if (field.type === 'date') {
           pageObj.drawText(value, { x: pdfX - 40, y: pdfY - 8, size: 10, font: helvetica, color: rgb(0.2, 0.2, 0.2) });
+        } else if (field.type === 'text') {
+          pageObj.drawText(value, { x: pdfX - 40, y: pdfY - 7, size: 11, font: helvetica, color: rgb(0.1, 0.1, 0.1) });
         }
       }
 
@@ -263,7 +271,7 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
                     border:    `2px solid ${FIELD_COLORS[f.type]}`,
                     borderRadius: '4px',
                     padding:   '4px 12px',
-                    minWidth:  '80px',
+                    minWidth:  f.type === 'text' ? '120px' : '80px',
                     textAlign: 'center',
                     cursor:    f.type === 'date' ? 'default' : 'pointer',
                     userSelect: 'none',
@@ -274,11 +282,18 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
                     f.type === 'signature' ? (
                       <img src={filledFields[f.id]} alt="signature" style={{ height: '32px', maxWidth: '100px', objectFit: 'contain' }} />
                     ) : (
-                      <span style={{ color: FIELD_COLORS[f.type], fontWeight: 700, fontSize: '13px' }}>{filledFields[f.id]}</span>
+                      <span style={{
+                        color: FIELD_COLORS[f.type], fontWeight: 700, fontSize: '13px',
+                        maxWidth: f.type === 'text' ? '160px' : undefined,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block',
+                      }}>{filledFields[f.id]}</span>
                     )
                   ) : (
                     <span style={{ color: '#fff', fontSize: '11px', fontWeight: 700 }}>
-                      {f.type === 'signature' ? 'CLICK TO SIGN' : f.type === 'initials' ? 'INITIALS' : 'DATE'}
+                      {f.type === 'signature' ? 'CLICK TO SIGN'
+                        : f.type === 'initials' ? 'INITIALS'
+                        : f.type === 'text'     ? 'CLICK TO TYPE'
+                        : 'DATE'}
                     </span>
                   )}
                 </div>
@@ -334,8 +349,10 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
             onClick={e => e.stopPropagation()}
             style={{ background: '#fff', borderRadius: '12px', padding: '28px', width: '460px', maxWidth: '95vw', boxShadow: '0 8px 40px rgba(0,0,0,0.3)' }}
           >
-            <h3 style={{ margin: '0 0 16px', color: '#1A5BA6', fontSize: '18px' }}>
-              {modalField.type === 'signature' ? 'Draw Your Signature' : 'Enter Your Initials'}
+            <h3 style={{ margin: '0 0 16px', color: FIELD_COLORS[modalField.type], fontSize: '18px' }}>
+              {modalField.type === 'signature' ? 'Draw Your Signature'
+                : modalField.type === 'initials' ? 'Enter Your Initials'
+                : 'Enter Text'}
             </h3>
 
             {modalField.type === 'signature' && (
@@ -370,6 +387,26 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
                     width: '100%', padding: '14px', fontSize: '28px', fontWeight: 700,
                     textAlign: 'center', border: '2px solid #2E7D32', borderRadius: '8px',
                     boxSizing: 'border-box', letterSpacing: '8px',
+                  }}
+                />
+              </>
+            )}
+
+            {modalField.type === 'text' && (
+              <>
+                <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#666' }}>
+                  Type the text to appear in this field on the document.
+                </p>
+                <textarea
+                  autoFocus
+                  value={textValue}
+                  onChange={e => setTextValue(e.target.value)}
+                  rows={3}
+                  placeholder="Enter text here…"
+                  style={{
+                    width: '100%', padding: '12px', fontSize: '15px',
+                    border: '2px solid #6B21A8', borderRadius: '8px',
+                    boxSizing: 'border-box', resize: 'vertical', fontFamily: 'sans-serif',
                   }}
                 />
               </>

@@ -5,7 +5,7 @@ export const metadata = { title: 'Sign Document | Rental911' };
 
 type Field = {
   id: string;
-  type: 'signature' | 'initials' | 'date';
+  type: 'signature' | 'initials' | 'date' | 'text';
   page: number;
   xPct: number;
   yPct: number;
