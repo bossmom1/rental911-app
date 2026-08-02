@@ -7,7 +7,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Update FROM_EMAIL to a domain you have verified in Resend.
 // Until verified, use 'onboarding@resend.dev' for testing.
-const FROM_EMAIL = 'Rental911 <onboarding@resend.dev>';
+const FROM_EMAIL = 'Rental911 <noreply@rental911.net>';
 
 export async function POST(request: NextRequest) {
   const current = await getCurrentUser();
