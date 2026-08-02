@@ -14,6 +14,7 @@ const NAV: NavItem[] = [
   { label: 'Compliance', href: '/admin/compliance' },
   { label: 'AFC Claims', href: '/admin/afc-claims' },
   { label: 'Financials', href: '/admin/financials' },
+  { label: 'Documents', href: '/admin/documents' },
 ];
 
 export default async function AdminLayout({
