@@ -31,10 +31,10 @@ type SigningRequest = {
 
 // ── Recipient colors ────────────────────────────────────────────────────────
 const RECIPIENT_COLORS = [
-  { color: '#D97706', light: '#FEF3C7' },   // Amber
-  { color: '#059669', light: '#D1FAE5' },   // Green
-  { color: '#7C3AED', light: '#EDE9FE' },   // Purple
-  { color: '#E11D48', light: '#FFE4E6' },   // Rose
+  { color: '#C9920A', light: '#FEF3C7' },   // Rental911 Gold
+  { color: '#0D7A6E', light: '#CCEDE9' },   // Deep Teal
+  { color: '#5B4DA6', light: '#EAE8F5' },   // Slate Purple
+  { color: '#B5341A', light: '#FAE0DA' },   // Deep Red
 ];
 
 const TYPE_ICON: Record<Field['type'], string> = {
@@ -829,6 +829,7 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
                   return (
                     <div
                       key={f.id}
+                      title={`${f.type} — ${cfg.label}`}
                       onMouseDown={e => handleFieldMouseDown(e, f.id)}
                       style={{
                         position: 'absolute',
@@ -837,27 +838,26 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
                         transform: 'translate(-50%, -50%)',
                         background: cfg.color + 'DD',
                         color: '#fff',
-                        padding: '4px 8px 4px 6px',
-                        borderRadius: '5px',
-                        fontSize: '11px',
+                        padding: '2px 5px',
+                        borderRadius: '4px',
+                        fontSize: '10px',
                         fontWeight: 700,
                         whiteSpace: 'nowrap',
                         cursor: 'grab',
                         userSelect: 'none',
-                        border: `2px solid ${cfg.color}`,
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+                        border: `1.5px solid ${cfg.color}`,
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '3px',
+                        gap: '2px',
                       }}
                     >
-                      <span style={{ cursor: 'grab', fontSize: '11px', opacity: 0.7 }}>⠿</span>
-                      <span>{TYPE_ICON[f.type]} {f.type}</span>
-                      <span style={{ fontSize: '9px', opacity: 0.8 }}>({cfg.label})</span>
+                      <span style={{ fontSize: '10px' }}>{TYPE_ICON[f.type]}</span>
+                      <span style={{ fontSize: '10px' }}>{f.type.slice(0, 3)}</span>
                       <button
                         onMouseDown={e => e.stopPropagation()}
                         onClick={e => { e.stopPropagation(); removeField(f.id); }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.9)', fontSize: '14px', padding: '0 0 0 2px', lineHeight: 1, fontWeight: 900 }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.9)', fontSize: '12px', padding: '0 0 0 1px', lineHeight: 1, fontWeight: 900 }}
                       >×</button>
                     </div>
                   );
