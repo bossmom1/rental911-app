@@ -23,20 +23,22 @@ export function PortalShell({
 }) {
   return (
     <div className="flex min-h-screen bg-light-blue/10">
-      <aside className="sticky top-0 flex h-screen w-64 flex-col gap-4 bg-navy p-4">
-        <div className="px-2 py-2">
+      <aside className="sticky top-0 flex h-screen w-64 flex-col gap-2 bg-navy p-3 overflow-hidden">
+        <div className="px-2 py-1 flex-shrink-0">
           <Logo href="#" light />
           <p className="mt-1 font-display font-bold uppercase tracking-wide text-gold">
             {roleLabel}
           </p>
         </div>
 
-        <SidebarNav items={navItems} />
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <SidebarNav items={navItems} />
+        </div>
 
-        {sidebarFooter && <div className="space-y-2">{sidebarFooter}</div>}
+        {sidebarFooter && <div className="space-y-1.5 flex-shrink-0">{sidebarFooter}</div>}
 
-        <div className="border-t border-white/20 pt-3">
-          <p className="px-3 pb-1 text-white/70">{userName}</p>
+        <div className="border-t border-white/20 pt-2 flex-shrink-0">
+          <p className="px-3 pb-1 text-white/70 text-sm truncate">{userName}</p>
           <SignOutButton />
         </div>
       </aside>
