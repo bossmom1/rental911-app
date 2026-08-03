@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
-type Signer = 'admin' | 'recipient';
+type FieldSigner = 'admin' | number;   // number = recipient index (0-based)
 
 type Field = {
   id: string;
@@ -11,8 +11,10 @@ type Field = {
   page: number;
   xPct: number;
   yPct: number;
-  signer: Signer;
+  signer: FieldSigner;
 };
+
+type Recipient = { name: string; email: string };
 
 type SigningRequest = {
   id: string;
@@ -23,13 +25,17 @@ type SigningRequest = {
   status: 'pending' | 'signed' | 'expired';
   created_at: string;
   signed_at: string | null;
+  session_id: string | null;
+  recipient_index: number | null;
 };
 
-// ── Signer config ──────────────────────────────────────────────────────────
-const SIGNER: Record<Signer, { color: string; light: string; icon: string; label: string }> = {
-  admin:     { color: '#1A5BA6', light: '#EBF3FF', icon: '✏️', label: 'You' },
-  recipient: { color: '#D97706', light: '#FEF3C7', icon: '👤', label: 'Recipient' },
-};
+// ── Recipient colors ────────────────────────────────────────────────────────
+const RECIPIENT_COLORS = [
+  { color: '#D97706', light: '#FEF3C7' },   // Amber
+  { color: '#059669', light: '#D1FAE5' },   // Green
+  { color: '#7C3AED', light: '#EDE9FE' },   // Purple
+  { color: '#E11D48', light: '#FFE4E6' },   // Rose
+];
 
 const TYPE_ICON: Record<Field['type'], string> = {
   signature: '✍️',
@@ -59,44 +65,52 @@ async function renderFontSig(name: string, fontFamily: string, fontSize: number,
   return canvas.toDataURL('image/png');
 }
 
+// ── Helper: signer config ──────────────────────────────────────────────────
+function getSignerConfig(signer: FieldSigner, recipients: Recipient[]) {
+  if (signer === 'admin') {
+    return { color: '#1A5BA6', light: '#EBF3FF', icon: '✏️', label: 'You' };
+  }
+  const idx = signer as number;
+  const rc  = RECIPIENT_COLORS[idx] ?? RECIPIENT_COLORS[0];
+  return { ...rc, icon: '👤', label: recipients[idx]?.name || `Recipient ${idx + 1}` };
+}
+
 export default function DocumentsClient({ requests }: { requests: SigningRequest[] }) {
-  const [view, setView]               = useState<'list' | 'prepare'>('list');
-  const [step, setStep]               = useState<1 | 2 | 3>(1);
-  const [signerName, setSignerName]   = useState('');
-  const [signerEmail, setSignerEmail] = useState('');
-  const [docTitle, setDocTitle]       = useState('');
-  const [file, setFile]               = useState<File | null>(null);
-  const [fields, setFields]           = useState<Field[]>([]);
-  const [activeType, setActiveType]   = useState<Field['type']>('signature');
-  const [activeSigner, setActiveSigner] = useState<Signer>('recipient');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages]   = useState(0);
-  const [pdfReady, setPdfReady]       = useState(false);
-  const [sending, setSending]         = useState(false);
-  const [error, setError]             = useState('');
-  const [sentUrl, setSentUrl]         = useState('');
-  const [dragOver, setDragOver]       = useState(false);
-  const [emailNote, setEmailNote]     = useState('');
+  const [view, setView]             = useState<'list' | 'prepare'>('list');
+  const [step, setStep]             = useState<1 | 2 | 3>(1);
+  const [recipients, setRecipients] = useState<Recipient[]>([{ name: '', email: '' }]);
+  const [docTitle, setDocTitle]     = useState('');
+  const [file, setFile]             = useState<File | null>(null);
+  const [fields, setFields]         = useState<Field[]>([]);
+  const [activeType, setActiveType] = useState<Field['type']>('signature');
+  const [activeSigner, setActiveSigner]           = useState<FieldSigner>(0);
+  const [editingRecipientIdx, setEditingRecipientIdx] = useState<number | null>(null);
+  const [currentPage, setCurrentPage]   = useState(1);
+  const [totalPages, setTotalPages]     = useState(0);
+  const [pdfReady, setPdfReady]         = useState(false);
+  const [sending, setSending]           = useState(false);
+  const [error, setError]               = useState('');
+  const [sentUrls, setSentUrls]         = useState<string[]>([]);
+  const [dragOver, setDragOver]         = useState(false);
+  const [emailNote, setEmailNote]       = useState('');
 
   // Admin signing modal
-  const [showAdminSign, setShowAdminSign]   = useState(false);
-  const [adminInitials, setAdminInitials]   = useState('');
-  const [adminSigName,  setAdminSigName]    = useState('Christine Pollard');
-  const [adminFontIdx,  setAdminFontIdx]    = useState(-1);
+  const [showAdminSign, setShowAdminSign] = useState(false);
+  const [adminInitials, setAdminInitials] = useState('');
+  const [adminSigName,  setAdminSigName]  = useState('Christine Pollard');
+  const [adminFontIdx,  setAdminFontIdx]  = useState(-1);
 
-  const canvasRef       = useRef<HTMLCanvasElement>(null);
-  const overlayRef      = useRef<HTMLDivElement>(null);
-  const pdfDocRef       = useRef<any>(null);
-  const pdfBytesRef     = useRef<Uint8Array | null>(null);
-  const renderTaskRef   = useRef<any>(null);
+  const canvasRef     = useRef<HTMLCanvasElement>(null);
+  const overlayRef    = useRef<HTMLDivElement>(null);
+  const pdfDocRef     = useRef<any>(null);
+  const pdfBytesRef   = useRef<Uint8Array | null>(null);
+  const renderTaskRef = useRef<any>(null);
 
-  // Drag state
   const draggingRef = useRef<{ id: string; offX: number; offY: number } | null>(null);
   const didDragRef  = useRef(false);
 
-  // ── Load CDN scripts once ──────────────────────────────────────────────
+  // ── Load CDN scripts ───────────────────────────────────────────────────
   useEffect(() => {
-    // Load Google signature fonts
     if (!document.getElementById('sig-fonts-css')) {
       const link = document.createElement('link');
       link.id = 'sig-fonts-css';
@@ -104,11 +118,10 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
       link.href = 'https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Great+Vibes&family=Pinyon+Script&display=swap';
       document.head.appendChild(link);
     }
-    const toLoad = [
+    [
       { key: 'pdfjsLib', src: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js' },
       { key: 'PDFLib',   src: 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js' },
-    ];
-    toLoad.forEach(({ key, src }) => {
+    ].forEach(({ key, src }) => {
       if ((window as any)[key]) return;
       const s = document.createElement('script');
       s.src = src;
@@ -126,11 +139,11 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
   const renderPage = useCallback(async (pageNum: number) => {
     if (!pdfDocRef.current || !canvasRef.current) return;
     if (renderTaskRef.current) renderTaskRef.current.cancel();
-    const page = await pdfDocRef.current.getPage(pageNum);
+    const page  = await pdfDocRef.current.getPage(pageNum);
     const scale = Math.min(1.4, (window.innerWidth * 0.6) / page.getViewport({ scale: 1 }).width);
-    const vp = page.getViewport({ scale });
+    const vp    = page.getViewport({ scale });
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d')!;
+    const ctx    = canvas.getContext('2d')!;
     canvas.width  = vp.width;
     canvas.height = vp.height;
     if (overlayRef.current) {
@@ -160,13 +173,13 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
     tryLoad();
   }, [file, step, renderPage]);
 
-  // ── Field drag handlers ─────────────────────────────────────────────────
+  // ── Field drag handlers ────────────────────────────────────────────────
   const handleFieldMouseDown = (e: React.MouseEvent, fieldId: string) => {
     e.stopPropagation();
     e.preventDefault();
     const overlay = overlayRef.current;
     if (!overlay) return;
-    const rect = overlay.getBoundingClientRect();
+    const rect  = overlay.getBoundingClientRect();
     const field = fields.find(f => f.id === fieldId);
     if (!field) return;
     draggingRef.current = {
@@ -190,11 +203,8 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
     ));
   };
 
-  const handleOverlayMouseUp = () => {
-    draggingRef.current = null;
-  };
+  const handleOverlayMouseUp = () => { draggingRef.current = null; };
 
-  // ── Place new field on click ────────────────────────────────────────────
   const handleOverlayClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (didDragRef.current) { didDragRef.current = false; return; }
     const overlay = overlayRef.current;
@@ -220,11 +230,11 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
     setError('');
   };
 
-  // ── Send flow ─────────────────────────────────────────────────────────
+  // ── Send flow ──────────────────────────────────────────────────────────
   const handleSend = () => {
     const adminFields = fields.filter(f => f.signer === 'admin');
     if (adminFields.length > 0) { setShowAdminSign(true); return; }
-    doSubmit(null, fields.filter(f => f.signer === 'recipient'));
+    doSubmit(null, fields.filter(f => f.signer !== 'admin'));
   };
 
   const handleAdminSignDone = async () => {
@@ -234,8 +244,8 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
       sigDataUrl = await renderFontSig(adminSigName.trim(), f.family, f.size, f.weight);
     }
     setShowAdminSign(false);
-    const adminFields     = fields.filter(f => f.signer === 'admin');
-    const recipientFields = fields.filter(f => f.signer === 'recipient');
+    const adminFields    = fields.filter(f => f.signer === 'admin');
+    const recipientFields = fields.filter(f => f.signer !== 'admin');
     const preSigned = await embedAdminSigs(file!, adminFields, sigDataUrl, adminInitials);
     doSubmit(preSigned, recipientFields);
   };
@@ -293,17 +303,15 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
     try {
       const fd = new FormData();
       fd.append('file', preSigned ?? file, 'document.pdf');
-      fd.append('signerName',    signerName);
-      fd.append('signerEmail',   signerEmail);
+      fd.append('recipients',    JSON.stringify(recipients));
       fd.append('documentTitle', docTitle);
       fd.append('emailNote',     emailNote);
-      // Strip internal signer prop before sending
-      const clean = recipientFields.map(({ signer: _s, ...rest }) => rest);
-      fd.append('fields', JSON.stringify(clean));
+      // Fields retain signer (number = recipient index) so API can split them per recipient
+      fd.append('fields', JSON.stringify(recipientFields));
       const res  = await fetch('/api/signing/create', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Failed to send'); return; }
-      setSentUrl(data.signingUrl);
+      setSentUrls(data.signingUrls ?? [data.signingUrl].filter(Boolean));
       setStep(3);
     } catch {
       setError('Network error — please try again');
@@ -313,14 +321,23 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
   };
 
   const resetPrepare = () => {
-    setStep(1); setFile(null); setFields([]); setSignerName('');
-    setSignerEmail(''); setDocTitle(''); setSentUrl(''); setError('');
+    setStep(1); setFile(null); setFields([]);
+    setRecipients([{ name: '', email: '' }]);
+    setDocTitle(''); setSentUrls([]); setError('');
     setPdfReady(false); pdfDocRef.current = null; pdfBytesRef.current = null;
-    setActiveSigner('recipient'); setAdminInitials(''); setEmailNote(''); setAdminFontIdx(-1);
+    setActiveSigner(0); setAdminInitials(''); setEmailNote(''); setAdminFontIdx(-1); setEditingRecipientIdx(null);
   };
 
   // ── LIST VIEW ─────────────────────────────────────────────────────────
   if (view === 'list') {
+    // Group requests by session_id (fall back to id for legacy single-recipient rows)
+    const sessionMap = new Map<string, SigningRequest[]>();
+    requests.forEach(r => {
+      const key = r.session_id ?? r.id;
+      if (!sessionMap.has(key)) sessionMap.set(key, []);
+      sessionMap.get(key)!.push(r);
+    });
+
     return (
       <div style={{ padding: '32px', fontFamily: 'sans-serif', maxWidth: '900px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -346,32 +363,66 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid #eee' }}>
-                {['Document', 'Recipient', 'Status', 'Sent', 'Signed'].map(h => (
+                {['Document', 'Recipients', 'Status', 'Sent', 'Completed'].map(h => (
                   <th key={h} style={{ textAlign: 'left', padding: '10px 12px', color: '#888', fontWeight: 600 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {requests.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={{ padding: '12px', fontWeight: 600, color: '#222' }}>{r.document_title}</td>
-                  <td style={{ padding: '12px', color: '#444' }}>
-                    <div>{r.signer_name}</div>
-                    <div style={{ fontSize: '12px', color: '#888' }}>{r.signer_email}</div>
-                  </td>
-                  <td style={{ padding: '12px' }}>
-                    <span style={{
-                      display: 'inline-block', padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
-                      background: r.status === 'signed' ? '#E8F5E9' : r.status === 'pending' ? '#FFF3E0' : '#FAFAFA',
-                      color:      r.status === 'signed' ? '#2E7D32' : r.status === 'pending' ? '#E65100' : '#999',
-                    }}>
-                      {r.status === 'signed' ? '✅ Signed' : r.status === 'pending' ? '⏳ Pending' : 'Expired'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px', color: '#666', fontSize: '13px' }}>{new Date(r.created_at).toLocaleDateString()}</td>
-                  <td style={{ padding: '12px', color: '#666', fontSize: '13px' }}>{r.signed_at ? new Date(r.signed_at).toLocaleDateString() : '—'}</td>
-                </tr>
-              ))}
+              {Array.from(sessionMap.values()).map(reqs => {
+                const first      = reqs[0];
+                const allSigned  = reqs.every(r => r.status === 'signed');
+                const signedCnt  = reqs.filter(r => r.status === 'signed').length;
+                const isMulti    = reqs.length > 1;
+                const lastSigned = reqs.reduce<string | null>((acc, r) => {
+                  if (!r.signed_at) return acc;
+                  return !acc || r.signed_at > acc ? r.signed_at : acc;
+                }, null);
+
+                return (
+                  <tr key={first.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                    <td style={{ padding: '12px', fontWeight: 600, color: '#222' }}>{first.document_title}</td>
+                    <td style={{ padding: '12px', color: '#444' }}>
+                      {isMulti ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {reqs.map((r, i) => (
+                            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{
+                                width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
+                                background: r.status === 'signed' ? '#2E7D32' : '#E65100',
+                              }} />
+                              <span style={{ fontSize: '13px' }}>{r.signer_name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <>
+                          <div>{first.signer_name}</div>
+                          <div style={{ fontSize: '12px', color: '#888' }}>{first.signer_email}</div>
+                        </>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <span style={{
+                        display: 'inline-block', padding: '3px 10px', borderRadius: '20px',
+                        fontSize: '12px', fontWeight: 700,
+                        background: allSigned ? '#E8F5E9' : '#FFF3E0',
+                        color:      allSigned ? '#2E7D32' : '#E65100',
+                      }}>
+                        {allSigned
+                          ? (isMulti ? `✅ All Signed` : '✅ Signed')
+                          : isMulti
+                          ? `⏳ ${signedCnt}/${reqs.length} Signed`
+                          : '⏳ Pending'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px', color: '#666', fontSize: '13px' }}>{new Date(first.created_at).toLocaleDateString()}</td>
+                    <td style={{ padding: '12px', color: '#666', fontSize: '13px' }}>
+                      {allSigned && lastSigned ? new Date(lastSigned).toLocaleDateString() : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -380,8 +431,10 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
   }
 
   // ── PREPARE VIEW ──────────────────────────────────────────────────────
-  const adminFields     = fields.filter(f => f.signer === 'admin');
-  const recipientFields = fields.filter(f => f.signer === 'recipient');
+  const adminFields = fields.filter(f => f.signer === 'admin');
+  const step1Valid  = !!file && !!docTitle.trim() &&
+                      recipients.length > 0 &&
+                      recipients.every(r => r.name.trim() && r.email.trim());
 
   return (
     <div style={{ padding: '24px 32px', fontFamily: 'sans-serif', height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
@@ -405,7 +458,7 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
             </div>
           ))}
           <div style={{ marginLeft: '8px', fontSize: '13px', color: '#666' }}>
-            {step === 1 ? 'Upload & Recipient' : step === 2 ? 'Place Fields' : 'Sent!'}
+            {step === 1 ? 'Upload & Recipients' : step === 2 ? 'Place Fields' : 'Sent!'}
           </div>
         </div>
       </div>
@@ -418,21 +471,67 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
 
       {/* ── STEP 1 ── */}
       {step === 1 && (
-        <div style={{ maxWidth: '560px' }}>
-          {[
-            { label: 'Recipient Name *',  value: signerName,  set: setSignerName,  placeholder: 'Full name',                      type: 'text' },
-            { label: 'Recipient Email *', value: signerEmail, set: setSignerEmail, placeholder: 'email@example.com',              type: 'email' },
-            { label: 'Document Title *',  value: docTitle,    set: setDocTitle,    placeholder: 'e.g. Rental911 Consulting Agreement', type: 'text' },
-          ].map(({ label, value, set, placeholder, type }) => (
-            <div key={label} style={{ marginBottom: '18px' }}>
-              <label style={{ display: 'block', fontWeight: 600, marginBottom: '6px', color: '#333', fontSize: '14px' }}>{label}</label>
-              <input
-                type={type} value={value} onChange={e => set(e.target.value)} placeholder={placeholder}
-                style={{ width: '100%', padding: '10px 12px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
-              />
-            </div>
-          ))}
+        <div style={{ maxWidth: '600px' }}>
+          {/* Document title */}
+          <div style={{ marginBottom: '18px' }}>
+            <label style={{ display: 'block', fontWeight: 600, marginBottom: '6px', color: '#333', fontSize: '14px' }}>Document Title *</label>
+            <input
+              type="text" value={docTitle} onChange={e => setDocTitle(e.target.value)}
+              placeholder="e.g. Rental911 Consulting Agreement"
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box' }}
+            />
+          </div>
 
+          {/* Recipients */}
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <label style={{ fontWeight: 700, color: '#333', fontSize: '14px' }}>
+                Recipients * <span style={{ fontWeight: 400, color: '#888', fontSize: '12px' }}>({recipients.length} of 4 max)</span>
+              </label>
+              {recipients.length < 4 && (
+                <button
+                  type="button"
+                  onClick={() => setRecipients(prev => [...prev, { name: '', email: '' }])}
+                  style={{ background: 'none', border: '1px solid #1A5BA6', color: '#1A5BA6', borderRadius: '6px', padding: '5px 12px', fontSize: '13px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  + Add Recipient
+                </button>
+              )}
+            </div>
+            {recipients.map((r, i) => {
+              const rc = RECIPIENT_COLORS[i] ?? RECIPIENT_COLORS[0];
+              return (
+                <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'center' }}>
+                  <div style={{ width: '4px', flexShrink: 0, alignSelf: 'stretch', background: rc.color, borderRadius: '3px' }} />
+                  <div style={{ flex: 1, display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      value={r.name}
+                      onChange={e => setRecipients(prev => prev.map((p, idx) => idx === i ? { ...p, name: e.target.value } : p))}
+                      placeholder={`Recipient ${i + 1} name`}
+                      style={{ flex: 1, padding: '9px 12px', border: `1px solid ${rc.color}44`, borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                    />
+                    <input
+                      type="email"
+                      value={r.email}
+                      onChange={e => setRecipients(prev => prev.map((p, idx) => idx === i ? { ...p, email: e.target.value } : p))}
+                      placeholder="email@example.com"
+                      style={{ flex: 1.2, padding: '9px 12px', border: `1px solid ${rc.color}44`, borderRadius: '6px', fontSize: '14px', outline: 'none' }}
+                    />
+                  </div>
+                  {recipients.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setRecipients(prev => prev.filter((_, idx) => idx !== i))}
+                      style={{ background: 'none', border: 'none', color: '#bbb', fontSize: '20px', cursor: 'pointer', padding: '0 4px', lineHeight: 1, flexShrink: 0 }}
+                    >×</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* PDF upload */}
           <div
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
@@ -461,12 +560,12 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
           </div>
 
           <button
-            disabled={!file || !signerName.trim() || !signerEmail.trim() || !docTitle.trim()}
+            disabled={!step1Valid}
             onClick={() => setStep(2)}
             style={{
               background: '#1A5BA6', color: '#fff', border: 'none', borderRadius: '8px',
               padding: '12px 32px', fontSize: '15px', fontWeight: 700, cursor: 'pointer',
-              opacity: (!file || !signerName.trim() || !signerEmail.trim() || !docTitle.trim()) ? 0.4 : 1,
+              opacity: !step1Valid ? 0.4 : 1,
             }}
           >
             Next: Place Signature Fields →
@@ -479,51 +578,139 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
         <div style={{ display: 'flex', gap: '24px', flex: 1, overflow: 'hidden' }}>
 
           {/* Left toolbar */}
-          <div style={{ width: '210px', flexShrink: 0, overflowY: 'auto' }}>
+          <div style={{ width: '220px', flexShrink: 0, overflowY: 'auto' }}>
             <div style={{ background: '#f8f8f8', borderRadius: '10px', padding: '16px' }}>
 
               {/* ── Signer toggle ── */}
               <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: '12px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Placing fields for</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
-                {(['admin', 'recipient'] as Signer[]).map(s => {
-                  const cfg    = SIGNER[s];
-                  const isActive = activeSigner === s;
-                  const name   = s === 'recipient' ? (signerName || 'Recipient') : 'You';
-                  const count  = fields.filter(f => f.signer === s).length;
+                {/* Admin (You) */}
+                {(() => {
+                  const cfg = getSignerConfig('admin', recipients);
+                  const isActive = activeSigner === 'admin';
+                  const count = fields.filter(f => f.signer === 'admin').length;
                   return (
                     <button
-                      key={s}
-                      onClick={() => setActiveSigner(s)}
+                      key="admin"
+                      onClick={() => setActiveSigner('admin')}
                       style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '9px 12px', borderRadius: '8px',
                         border: `2px solid ${cfg.color}`,
                         background: isActive ? cfg.color : cfg.light,
                         color: isActive ? '#fff' : cfg.color,
-                        fontWeight: 700, fontSize: '13px', cursor: 'pointer',
-                        transition: 'all 0.15s',
+                        fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.15s',
                         boxShadow: isActive ? `0 2px 8px ${cfg.color}55` : 'none',
                       }}
                     >
-                      <span>{cfg.icon} {name}</span>
+                      <span>✏️ You</span>
                       {count > 0 && (
-                        <span style={{
-                          background: isActive ? 'rgba(255,255,255,0.35)' : cfg.color,
-                          color: '#fff', borderRadius: '10px', padding: '1px 7px', fontSize: '11px',
-                        }}>
+                        <span style={{ background: isActive ? 'rgba(255,255,255,0.35)' : cfg.color, color: '#fff', borderRadius: '10px', padding: '1px 7px', fontSize: '11px' }}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })()}
+                {/* Each recipient */}
+                {recipients.map((r, i) => {
+                  const cfg = getSignerConfig(i, recipients);
+                  const isActive = activeSigner === i;
+                  const count = fields.filter(f => f.signer === i).length;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setActiveSigner(i)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '9px 12px', borderRadius: '8px',
+                        border: `2px solid ${cfg.color}`,
+                        background: isActive ? cfg.color : cfg.light,
+                        color: isActive ? '#fff' : cfg.color,
+                        fontWeight: 700, fontSize: '13px', cursor: 'pointer', transition: 'all 0.15s',
+                        boxShadow: isActive ? `0 2px 8px ${cfg.color}55` : 'none',
+                      }}
+                    >
+                      <span>👤 {r.name || `Recipient ${i + 1}`}</span>
+                      {count > 0 && (
+                        <span style={{ background: isActive ? 'rgba(255,255,255,0.35)' : cfg.color, color: '#fff', borderRadius: '10px', padding: '1px 7px', fontSize: '11px' }}>
                           {count}
                         </span>
                       )}
                     </button>
                   );
                 })}
+                {/* Add recipient inline */}
+                {recipients.length < 4 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newIdx = recipients.length;
+                      setRecipients(prev => [...prev, { name: '', email: '' }]);
+                      setActiveSigner(newIdx);
+                      setEditingRecipientIdx(newIdx);
+                    }}
+                    style={{
+                      padding: '7px 12px', border: '1px dashed #bbb', borderRadius: '8px',
+                      background: '#fff', color: '#888', fontSize: '12px', fontWeight: 600,
+                      cursor: 'pointer', textAlign: 'left',
+                    }}
+                  >
+                    + Add Recipient
+                  </button>
+                )}
+                {/* Inline name/email editor for a newly added recipient */}
+                {editingRecipientIdx !== null && recipients[editingRecipientIdx] !== undefined && (
+                  <div style={{ background: '#fff', border: '1px solid #ddd', borderRadius: '8px', padding: '10px', marginTop: '2px' }}>
+                    <p style={{ margin: '0 0 6px', fontSize: '11px', fontWeight: 700, color: '#555' }}>
+                      {RECIPIENT_COLORS[editingRecipientIdx] && (
+                        <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: RECIPIENT_COLORS[editingRecipientIdx].color, marginRight: '5px' }} />
+                      )}
+                      Recipient {editingRecipientIdx + 1} details
+                    </p>
+                    <input
+                      type="text"
+                      placeholder="Full name"
+                      value={recipients[editingRecipientIdx]?.name ?? ''}
+                      onChange={e => setRecipients(prev => prev.map((p, idx) => idx === editingRecipientIdx ? { ...p, name: e.target.value } : p))}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', border: '1px solid #ddd', borderRadius: '5px', fontSize: '12px', marginBottom: '6px' }}
+                    />
+                    <input
+                      type="email"
+                      placeholder="email@example.com"
+                      value={recipients[editingRecipientIdx]?.email ?? ''}
+                      onChange={e => setRecipients(prev => prev.map((p, idx) => idx === editingRecipientIdx ? { ...p, email: e.target.value } : p))}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', border: '1px solid #ddd', borderRadius: '5px', fontSize: '12px', marginBottom: '8px' }}
+                    />
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setEditingRecipientIdx(null)}
+                        style={{ flex: 1, padding: '5px', background: '#1A5BA6', color: '#fff', border: 'none', borderRadius: '5px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Done
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRecipients(prev => prev.filter((_, idx) => idx !== editingRecipientIdx));
+                          setEditingRecipientIdx(null);
+                          setActiveSigner(0);
+                        }}
+                        style={{ padding: '5px 10px', background: '#fff', color: '#999', border: '1px solid #ddd', borderRadius: '5px', fontSize: '12px', cursor: 'pointer' }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ── Field type ── */}
               <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: '12px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Field type</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
                 {(['signature', 'initials', 'text'] as Field['type'][]).map(type => {
-                  const cfg = SIGNER[activeSigner];
+                  const cfg = getSignerConfig(activeSigner, recipients);
                   const isActive = activeType === type;
                   return (
                     <button
@@ -534,8 +721,7 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
                         borderRadius: '6px',
                         background: isActive ? cfg.color : '#fff',
                         color: isActive ? '#fff' : cfg.color,
-                        fontWeight: 700, fontSize: '13px', cursor: 'pointer',
-                        textAlign: 'left',
+                        fontWeight: 700, fontSize: '13px', cursor: 'pointer', textAlign: 'left',
                       }}
                     >
                       {TYPE_ICON[type]} {type.charAt(0).toUpperCase() + type.slice(1)}
@@ -555,23 +741,37 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
               {/* ── Field list ── */}
               <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: '12px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Fields ({fields.length})</p>
               {fields.length === 0 && (
-                <p style={{ fontSize: '12px', color: '#aaa', margin: 0 }}>Click on the document to place fields</p>
+                <p style={{ fontSize: '12px', color: '#aaa', margin: 0 }}>Click the document to place fields</p>
               )}
-              {(['admin', 'recipient'] as Signer[]).map(s => {
-                const sFields = fields.filter(f => f.signer === s);
-                if (sFields.length === 0) return null;
-                const cfg = SIGNER[s];
+              {/* Admin fields */}
+              {(() => {
+                const sFields = fields.filter(f => f.signer === 'admin');
+                if (!sFields.length) return null;
+                const cfg = getSignerConfig('admin', recipients);
                 return (
-                  <div key={s} style={{ marginBottom: '8px' }}>
+                  <div style={{ marginBottom: '8px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: cfg.color, marginBottom: '4px' }}>✏️ You</div>
+                    {sFields.map(f => (
+                      <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 8px', marginBottom: '3px', background: cfg.light, border: `1px solid ${cfg.color}`, borderRadius: '4px', fontSize: '12px' }}>
+                        <span style={{ color: cfg.color, fontWeight: 600 }}>{TYPE_ICON[f.type]} {f.type} p.{f.page}</span>
+                        <button onClick={() => removeField(f.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', fontSize: '14px', padding: 0 }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* Recipient fields */}
+              {recipients.map((r, i) => {
+                const sFields = fields.filter(f => f.signer === i);
+                if (!sFields.length) return null;
+                const cfg = getSignerConfig(i, recipients);
+                return (
+                  <div key={i} style={{ marginBottom: '8px' }}>
                     <div style={{ fontSize: '11px', fontWeight: 700, color: cfg.color, marginBottom: '4px' }}>
-                      {cfg.icon} {s === 'recipient' ? signerName || 'Recipient' : 'You'}
+                      👤 {r.name || `Recipient ${i + 1}`}
                     </div>
                     {sFields.map(f => (
-                      <div key={f.id} style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        padding: '3px 8px', marginBottom: '3px',
-                        background: cfg.light, border: `1px solid ${cfg.color}`, borderRadius: '4px', fontSize: '12px',
-                      }}>
+                      <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 8px', marginBottom: '3px', background: cfg.light, border: `1px solid ${cfg.color}`, borderRadius: '4px', fontSize: '12px' }}>
                         <span style={{ color: cfg.color, fontWeight: 600 }}>{TYPE_ICON[f.type]} {f.type} p.{f.page}</span>
                         <button onClick={() => removeField(f.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', fontSize: '14px', padding: 0 }}>×</button>
                       </div>
@@ -582,19 +782,14 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
 
               <div style={{ borderTop: '1px solid #eee', margin: '14px 0' }} />
 
-              {/* Email note compose */}
+              {/* Email note */}
               <p style={{ margin: '0 0 6px', fontWeight: 700, fontSize: '12px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Personal note (optional)</p>
               <textarea
                 value={emailNote}
                 onChange={e => setEmailNote(e.target.value)}
-                placeholder={`Hi ${signerName || '[Name]'},\n\nPlease review and sign at your earliest convenience.`}
+                placeholder={`Hi ${recipients[0]?.name || '[Name]'},\n\nPlease review and sign at your earliest convenience.`}
                 rows={4}
-                style={{
-                  width: '100%', boxSizing: 'border-box', padding: '8px 10px',
-                  border: '1px solid #ddd', borderRadius: '6px', fontSize: '12px',
-                  resize: 'vertical', color: '#333', lineHeight: 1.5,
-                  fontFamily: 'sans-serif', marginBottom: '12px',
-                }}
+                style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '12px', resize: 'vertical', color: '#333', lineHeight: 1.5, fontFamily: 'sans-serif', marginBottom: '12px' }}
               />
 
               <button
@@ -606,7 +801,7 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
                   cursor: 'pointer', opacity: (sending || fields.length === 0) ? 0.4 : 1,
                 }}
               >
-                {sending ? 'Processing…' : adminFields.length > 0 ? '✏️ Sign & Send →' : '📤 Send for Signature →'}
+                {sending ? 'Processing…' : adminFields.length > 0 ? '✏️ Sign & Send →' : `📤 Send to ${recipients.length} Recipient${recipients.length !== 1 ? 's' : ''} →`}
               </button>
               {adminFields.length > 0 && (
                 <p style={{ fontSize: '11px', color: '#888', textAlign: 'center', margin: '6px 0 0', lineHeight: 1.5 }}>
@@ -621,8 +816,6 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
             {!pdfReady && <div style={{ color: '#fff', alignSelf: 'center', fontSize: '16px' }}>Loading PDF…</div>}
             <div style={{ position: 'relative', display: pdfReady ? 'block' : 'none' }}>
               <canvas ref={canvasRef} style={{ display: 'block', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }} />
-
-              {/* Overlay for click-to-place + drag */}
               <div
                 ref={overlayRef}
                 onClick={handleOverlayClick}
@@ -632,7 +825,7 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
                 style={{ position: 'absolute', top: 0, left: 0, cursor: 'crosshair' }}
               >
                 {fields.filter(f => f.page === currentPage).map(f => {
-                  const cfg = SIGNER[f.signer];
+                  const cfg = getSignerConfig(f.signer, recipients);
                   return (
                     <div
                       key={f.id}
@@ -677,21 +870,42 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
 
       {/* ── STEP 3 ── */}
       {step === 3 && (
-        <div style={{ maxWidth: '520px', textAlign: 'center', paddingTop: '60px' }}>
-          <div style={{ fontSize: '72px', marginBottom: '16px' }}>✅</div>
-          <h2 style={{ color: '#2E7D32', margin: '0 0 12px' }}>Document Sent!</h2>
-          <p style={{ color: '#444', lineHeight: 1.6, margin: '0 0 8px' }}>
-            <strong>{signerName}</strong> ({signerEmail}) has been emailed a link to sign <strong>{docTitle}</strong>.
-          </p>
-          <p style={{ color: '#666', fontSize: '14px', margin: '0 0 32px' }}>
-            You'll receive an email with the signed copy as soon as they complete it.
-          </p>
-          {sentUrl && (
-            <div style={{ background: '#f5f5f5', borderRadius: '8px', padding: '12px 16px', marginBottom: '24px', wordBreak: 'break-all' }}>
-              <p style={{ margin: '0 0 6px', fontSize: '12px', color: '#888', fontWeight: 700 }}>SIGNING LINK</p>
-              <a href={sentUrl} target="_blank" rel="noreferrer" style={{ color: '#1A5BA6', fontSize: '13px' }}>{sentUrl}</a>
+        <div style={{ maxWidth: '540px', paddingTop: '60px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+            <div style={{ fontSize: '72px', marginBottom: '16px' }}>✅</div>
+            <h2 style={{ color: '#2E7D32', margin: '0 0 12px' }}>
+              {recipients.length > 1 ? 'Documents Sent!' : 'Document Sent!'}
+            </h2>
+            <p style={{ color: '#444', lineHeight: 1.6, margin: '0 0 8px' }}>
+              {recipients.length === 1
+                ? <><strong>{recipients[0].name}</strong> has been emailed a link to sign <strong>{docTitle}</strong>.</>
+                : <><strong>{recipients.length} recipients</strong> have been emailed links to sign <strong>{docTitle}</strong>.</>
+              }
+            </p>
+          </div>
+
+          {recipients.length > 1 && (
+            <div style={{ background: '#f8f8f8', borderRadius: '10px', padding: '16px', marginBottom: '24px' }}>
+              {recipients.map((r, i) => {
+                const rc = RECIPIENT_COLORS[i] ?? RECIPIENT_COLORS[0];
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0', borderBottom: i < recipients.length - 1 ? '1px solid #eee' : 'none' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: rc.color, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#222', fontSize: '14px' }}>{r.name}</div>
+                      <div style={{ color: '#888', fontSize: '12px' }}>{r.email}</div>
+                    </div>
+                    <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#E65100', fontWeight: 600 }}>⏳ Awaiting</span>
+                  </div>
+                );
+              })}
             </div>
           )}
+
+          <p style={{ color: '#666', fontSize: '14px', margin: '0 0 32px', textAlign: 'center' }}>
+            You'll receive an email{recipients.length > 1 ? ' as each person signs' : ''} with the signed copy.
+          </p>
+
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
             <button onClick={() => { setView('list'); resetPrepare(); window.location.reload(); }} style={{ background: '#1A5BA6', color: '#fff', border: 'none', borderRadius: '8px', padding: '12px 24px', fontWeight: 700, cursor: 'pointer', fontSize: '14px' }}>
               View All Documents
@@ -715,7 +929,11 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
                 : 'Add Your Initials'}
             </h2>
             <p style={{ margin: '0 0 18px', color: '#666', fontSize: '14px' }}>
-              This will be embedded into the document before {signerName} receives it.
+              This will be embedded before {
+                recipients.length === 1
+                  ? recipients[0].name
+                  : `${recipients.length} recipients`
+              } receive{recipients.length === 1 ? 's' : ''} it.
             </p>
 
             {adminFields.some(f => f.type === 'signature') && (
@@ -734,13 +952,9 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
                       onClick={() => setAdminFontIdx(i)}
                       style={{
                         border: `2px solid ${adminFontIdx === i ? '#1A5BA6' : '#ddd'}`,
-                        borderRadius: '8px',
-                        padding: '10px 20px',
-                        cursor: 'pointer',
+                        borderRadius: '8px', padding: '10px 20px', cursor: 'pointer',
                         background: adminFontIdx === i ? '#EBF3FF' : '#fafafa',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         transition: 'all 0.15s',
                       }}
                     >
