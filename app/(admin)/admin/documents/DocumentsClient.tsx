@@ -707,9 +707,15 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
       {showAdminSign && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
           <div style={{ background: '#fff', borderRadius: '16px', padding: '32px', width: '500px', maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-            <h2 style={{ margin: '0 0 6px', color: '#1A5BA6', fontSize: '20px' }}>Add Your Signature</h2>
+            <h2 style={{ margin: '0 0 6px', color: '#1A5BA6', fontSize: '20px' }}>
+              {adminFields.some(f => f.type === 'signature') && adminFields.some(f => f.type === 'initials')
+                ? 'Sign & Initial'
+                : adminFields.some(f => f.type === 'signature')
+                ? 'Choose Your Signature Style'
+                : 'Add Your Initials'}
+            </h2>
             <p style={{ margin: '0 0 18px', color: '#666', fontSize: '14px' }}>
-              Your signature will be embedded before {signerName} receives the document.
+              This will be embedded into the document before {signerName} receives it.
             </p>
 
             {adminFields.some(f => f.type === 'signature') && (
