@@ -7,7 +7,7 @@ type Signer = 'admin' | 'recipient';
 
 type Field = {
   id: string;
-  type: 'signature' | 'initials' | 'date';
+  type: 'signature' | 'initials' | 'date' | 'text';
   page: number;
   xPct: number;
   yPct: number;
@@ -35,7 +35,29 @@ const TYPE_ICON: Record<Field['type'], string> = {
   signature: '✍️',
   initials:  '🔤',
   date:      '📅',
+  text:      '📝',
 };
+
+const SIG_FONTS = [
+  { label: 'Elegant',  family: '"Dancing Script", cursive', size: 46, weight: '700' },
+  { label: 'Classic',  family: '"Great Vibes", cursive',    size: 50, weight: '400' },
+  { label: 'Formal',   family: '"Pinyon Script", cursive',  size: 44, weight: '400' },
+];
+
+async function renderFontSig(name: string, fontFamily: string, fontSize: number, weight: string): Promise<string> {
+  const spec = `${weight} ${fontSize}px ${fontFamily}`;
+  try { await (document as any).fonts.load(spec, name); } catch { /* fallback */ }
+  const canvas = document.createElement('canvas');
+  canvas.width = 420; canvas.height = 100;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, 420, 100);
+  ctx.fillStyle = '#111';
+  ctx.font = `${weight} ${fontSize}px ${fontFamily}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(name, 210, 52);
+  return canvas.toDataURL('image/png');
+}
 
 export default function DocumentsClient({ requests }: { requests: SigningRequest[] }) {
   const [view, setView]               = useState<'list' | 'prepare'>('list');
@@ -54,12 +76,13 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
   const [error, setError]             = useState('');
   const [sentUrl, setSentUrl]         = useState('');
   const [dragOver, setDragOver]       = useState(false);
+  const [emailNote, setEmailNote]     = useState('');
 
   // Admin signing modal
-  const [showAdminSign, setShowAdminSign] = useState(false);
-  const [adminInitials, setAdminInitials] = useState('');
-  const adminSigCanvasRef = useRef<HTMLCanvasElement>(null);
-  const adminSigPadRef    = useRef<any>(null);
+  const [showAdminSign, setShowAdminSign]   = useState(false);
+  const [adminInitials, setAdminInitials]   = useState('');
+  const [adminSigName,  setAdminSigName]    = useState('Christine Pollard');
+  const [adminFontIdx,  setAdminFontIdx]    = useState(-1);
 
   const canvasRef       = useRef<HTMLCanvasElement>(null);
   const overlayRef      = useRef<HTMLDivElement>(null);
@@ -73,10 +96,17 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
 
   // ── Load CDN scripts once ──────────────────────────────────────────────
   useEffect(() => {
+    // Load Google signature fonts
+    if (!document.getElementById('sig-fonts-css')) {
+      const link = document.createElement('link');
+      link.id = 'sig-fonts-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Great+Vibes&family=Pinyon+Script&display=swap';
+      document.head.appendChild(link);
+    }
     const toLoad = [
-      { key: 'pdfjsLib',    src: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js' },
-      { key: 'PDFLib',      src: 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js' },
-      { key: 'SignaturePad',src: 'https://cdnjs.cloudflare.com/ajax/libs/signature_pad/4.1.7/signature_pad.umd.min.js' },
+      { key: 'pdfjsLib', src: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js' },
+      { key: 'PDFLib',   src: 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js' },
     ];
     toLoad.forEach(({ key, src }) => {
       if ((window as any)[key]) return;
@@ -91,23 +121,6 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
       document.head.appendChild(s);
     });
   }, []);
-
-  // ── Init admin signature pad ───────────────────────────────────────────
-  useEffect(() => {
-    if (!showAdminSign) return;
-    const init = () => {
-      if (!adminSigCanvasRef.current) return;
-      const SP = (window as any).SignaturePad;
-      if (!SP) { setTimeout(init, 150); return; }
-      adminSigPadRef.current = new SP(adminSigCanvasRef.current, {
-        backgroundColor: 'rgb(255,255,255)',
-        penColor: '#1A5BA6',
-        minWidth: 1.5,
-        maxWidth: 3,
-      });
-    };
-    setTimeout(init, 100);
-  }, [showAdminSign]);
 
   // ── Render PDF page ────────────────────────────────────────────────────
   const renderPage = useCallback(async (pageNum: number) => {
@@ -215,10 +228,13 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
   };
 
   const handleAdminSignDone = async () => {
-    const pad = adminSigPadRef.current;
-    const sigDataUrl = pad && !pad.isEmpty() ? pad.toDataURL('image/png') : null;
+    let sigDataUrl: string | null = null;
+    if (adminFontIdx >= 0 && adminSigName.trim()) {
+      const f = SIG_FONTS[adminFontIdx];
+      sigDataUrl = await renderFontSig(adminSigName.trim(), f.family, f.size, f.weight);
+    }
     setShowAdminSign(false);
-    const adminFields    = fields.filter(f => f.signer === 'admin');
+    const adminFields     = fields.filter(f => f.signer === 'admin');
     const recipientFields = fields.filter(f => f.signer === 'recipient');
     const preSigned = await embedAdminSigs(file!, adminFields, sigDataUrl, adminInitials);
     doSubmit(preSigned, recipientFields);
@@ -254,11 +270,15 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
       if (field.type === 'signature' && sigImg) {
         const sw = 160, sh = 50;
         pg.drawImage(sigImg, { x: cx - sw / 2, y: cy - sh / 2, width: sw, height: sh });
-        pg.drawText(today, { x: cx - 35, y: cy - sh / 2 - 13, size: 8, font, color: PDFLib.rgb(0.4, 0.4, 0.4) });
+        pg.drawText(today, { x: cx - sw / 2, y: cy - sh / 2 - 13, size: 8, font, color: PDFLib.rgb(0.4, 0.4, 0.4) });
       } else if (field.type === 'initials' && initials) {
-        pg.drawText(initials.toUpperCase().slice(0, 4), { x: cx - 18, y: cy - 8, size: 18, font, color: PDFLib.rgb(0.1, 0.36, 0.65) });
+        pg.drawText(initials.toUpperCase().slice(0, 4), { x: cx - 18, y: cy - 4, size: 18, font, color: PDFLib.rgb(0.1, 0.36, 0.65) });
+        pg.drawText(today, { x: cx - 28, y: cy - 18, size: 7, font, color: PDFLib.rgb(0.4, 0.4, 0.4) });
       } else if (field.type === 'date') {
         pg.drawText(today, { x: cx - 35, y: cy - 7, size: 11, font, color: PDFLib.rgb(0.2, 0.2, 0.2) });
+      } else if (field.type === 'text') {
+        const txt = (field as any).value || '';
+        if (txt) pg.drawText(txt, { x: cx - 40, y: cy - 7, size: 11, font, color: PDFLib.rgb(0.1, 0.1, 0.1) });
       }
     }
 
@@ -276,6 +296,7 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
       fd.append('signerName',    signerName);
       fd.append('signerEmail',   signerEmail);
       fd.append('documentTitle', docTitle);
+      fd.append('emailNote',     emailNote);
       // Strip internal signer prop before sending
       const clean = recipientFields.map(({ signer: _s, ...rest }) => rest);
       fd.append('fields', JSON.stringify(clean));
@@ -295,7 +316,7 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
     setStep(1); setFile(null); setFields([]); setSignerName('');
     setSignerEmail(''); setDocTitle(''); setSentUrl(''); setError('');
     setPdfReady(false); pdfDocRef.current = null; pdfBytesRef.current = null;
-    setActiveSigner('recipient'); setAdminInitials('');
+    setActiveSigner('recipient'); setAdminInitials(''); setEmailNote(''); setAdminFontIdx(-1);
   };
 
   // ── LIST VIEW ─────────────────────────────────────────────────────────
@@ -501,7 +522,7 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
               {/* ── Field type ── */}
               <p style={{ margin: '0 0 8px', fontWeight: 700, fontSize: '12px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Field type</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
-                {(['signature', 'initials', 'date'] as Field['type'][]).map(type => {
+                {(['signature', 'initials', 'text'] as Field['type'][]).map(type => {
                   const cfg = SIGNER[activeSigner];
                   const isActive = activeType === type;
                   return (
@@ -560,6 +581,21 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
               })}
 
               <div style={{ borderTop: '1px solid #eee', margin: '14px 0' }} />
+
+              {/* Email note compose */}
+              <p style={{ margin: '0 0 6px', fontWeight: 700, fontSize: '12px', color: '#555', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Personal note (optional)</p>
+              <textarea
+                value={emailNote}
+                onChange={e => setEmailNote(e.target.value)}
+                placeholder={`Hi ${signerName || '[Name]'},\n\nPlease review and sign at your earliest convenience.`}
+                rows={4}
+                style={{
+                  width: '100%', boxSizing: 'border-box', padding: '8px 10px',
+                  border: '1px solid #ddd', borderRadius: '6px', fontSize: '12px',
+                  resize: 'vertical', color: '#333', lineHeight: 1.5,
+                  fontFamily: 'sans-serif', marginBottom: '12px',
+                }}
+              />
 
               <button
                 onClick={handleSend}
@@ -672,18 +708,45 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
           <div style={{ background: '#fff', borderRadius: '16px', padding: '32px', width: '500px', maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
             <h2 style={{ margin: '0 0 6px', color: '#1A5BA6', fontSize: '20px' }}>Add Your Signature</h2>
-            <p style={{ margin: '0 0 22px', color: '#666', fontSize: '14px' }}>
+            <p style={{ margin: '0 0 18px', color: '#666', fontSize: '14px' }}>
               Your signature will be embedded before {signerName} receives the document.
             </p>
 
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#333', marginBottom: '8px' }}>✍️ Draw your signature</label>
-            <div style={{ position: 'relative', border: '2px solid #1A5BA6', borderRadius: '8px', overflow: 'hidden', marginBottom: '4px' }}>
-              <canvas ref={adminSigCanvasRef} width={436} height={130} style={{ display: 'block', width: '100%', cursor: 'crosshair', touchAction: 'none' }} />
-              <div style={{ position: 'absolute', bottom: '10px', left: '50%', transform: 'translateX(-50%)', width: '65%', borderBottom: '1px solid #ddd', pointerEvents: 'none' }} />
-            </div>
-            <button onClick={() => adminSigPadRef.current?.clear()} style={{ fontSize: '12px', color: '#999', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: '18px' }}>
-              Clear signature
-            </button>
+            {adminFields.some(f => f.type === 'signature') && (
+              <>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#333', marginBottom: '8px' }}>Your name</label>
+                <input
+                  value={adminSigName}
+                  onChange={e => setAdminSigName(e.target.value)}
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', marginBottom: '14px' }}
+                />
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, color: '#333', marginBottom: '8px' }}>Choose a signature style</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                  {SIG_FONTS.map((f, i) => (
+                    <div
+                      key={f.label}
+                      onClick={() => setAdminFontIdx(i)}
+                      style={{
+                        border: `2px solid ${adminFontIdx === i ? '#1A5BA6' : '#ddd'}`,
+                        borderRadius: '8px',
+                        padding: '10px 20px',
+                        cursor: 'pointer',
+                        background: adminFontIdx === i ? '#EBF3FF' : '#fafafa',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <span style={{ fontFamily: f.family, fontSize: f.size * 0.75, fontWeight: f.weight as any, color: '#111', lineHeight: 1.2 }}>
+                        {adminSigName || 'Your Name'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: adminFontIdx === i ? '#1A5BA6' : '#aaa', fontWeight: 600 }}>{f.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
 
             {adminFields.some(f => f.type === 'initials') && (
               <div style={{ marginBottom: '18px' }}>
@@ -698,9 +761,13 @@ export default function DocumentsClient({ requests }: { requests: SigningRequest
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
               <button onClick={() => setShowAdminSign(false)} style={{ padding: '10px 20px', border: '1px solid #ddd', borderRadius: '8px', cursor: 'pointer', background: '#fff', fontWeight: 600 }}>Cancel</button>
-              <button onClick={handleAdminSignDone} style={{ padding: '10px 28px', background: '#1A5BA6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontSize: '15px' }}>
+              <button
+                onClick={handleAdminSignDone}
+                disabled={adminFields.some(f => f.type === 'signature') && adminFontIdx < 0}
+                style={{ padding: '10px 28px', background: '#1A5BA6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', fontSize: '15px', opacity: (adminFields.some(f => f.type === 'signature') && adminFontIdx < 0) ? 0.4 : 1 }}
+              >
                 Apply & Send →
               </button>
             </div>

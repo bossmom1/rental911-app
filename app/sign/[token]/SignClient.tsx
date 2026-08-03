@@ -18,6 +18,27 @@ type Props = {
   documentTitle: string;
 };
 
+const SIG_FONTS = [
+  { label: 'Elegant',  family: '"Dancing Script", cursive', size: 46, weight: '700' },
+  { label: 'Classic',  family: '"Great Vibes", cursive',    size: 50, weight: '400' },
+  { label: 'Formal',   family: '"Pinyon Script", cursive',  size: 44, weight: '400' },
+];
+
+async function renderFontSig(name: string, fontFamily: string, fontSize: number, weight: string): Promise<string> {
+  const spec = `${weight} ${fontSize}px ${fontFamily}`;
+  try { await (document as any).fonts.load(spec, name); } catch { /* fallback */ }
+  const canvas = document.createElement('canvas');
+  canvas.width = 420; canvas.height = 100;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, 420, 100);
+  ctx.fillStyle = '#111';
+  ctx.font = `${weight} ${fontSize}px ${fontFamily}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(name, 210, 52);
+  return canvas.toDataURL('image/png');
+}
+
 const FIELD_COLORS: Record<Field['type'], string> = {
   signature: '#1A5BA6',
   initials:  '#2E7D32',
@@ -33,14 +54,14 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
   const [modalField, setModalField]       = useState<Field | null>(null);
   const [initialsText, setInitialsText]   = useState('');
   const [textValue, setTextValue]         = useState('');
+  const [selectedFontIdx, setSelectedFontIdx] = useState(-1);
+  const [sigDisplayName, setSigDisplayName]   = useState('');
   const [submitting, setSubmitting]       = useState(false);
   const [submitted, setSubmitted]         = useState(false);
   const [error, setError]                 = useState('');
 
   const canvasRef     = useRef<HTMLCanvasElement>(null);
   const overlayRef    = useRef<HTMLDivElement>(null);
-  const sigPadRef     = useRef<any>(null);
-  const sigCanvasRef  = useRef<HTMLCanvasElement>(null);
   const pdfDocRef     = useRef<any>(null);
   const renderTaskRef = useRef<any>(null);
   const pdfBytesRef   = useRef<Uint8Array | null>(null);
@@ -56,11 +77,18 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
     });
 
     (async () => {
+      // Load signature fonts
+      if (!document.getElementById('sig-fonts-css')) {
+        const link = document.createElement('link');
+        link.id = 'sig-fonts-css';
+        link.rel = 'stylesheet';
+        link.href = 'https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Great+Vibes&family=Pinyon+Script&display=swap';
+        document.head.appendChild(link);
+      }
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
       (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc =
         'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
       await loadScript('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js');
-      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/signature_pad/4.1.7/signature_pad.umd.min.js');
       await loadPdf();
     })();
   }, []);
@@ -103,32 +131,27 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
     setCurrentPage(pageNum);
   }, []);
 
-  // Initialise signature pad when modal opens
-  useEffect(() => {
-    if (modalField?.type !== 'signature' || !sigCanvasRef.current) return;
-    const SignaturePad = (window as any).SignaturePad;
-    if (!SignaturePad) return;
-    if (sigPadRef.current) sigPadRef.current.off();
-    sigPadRef.current = new SignaturePad(sigCanvasRef.current, {
-      backgroundColor: 'rgba(255,255,255,0)',
-      penColor: '#000',
-    });
-  }, [modalField]);
-
   const openFieldModal = (f: Field) => {
-    if (filledFields[f.id]) return; // already filled — could allow re-sign if needed
-    if (f.type === 'date') return;   // auto-filled
+    if (filledFields[f.id]) return;
+    if (f.type === 'date') return;
     setModalField(f);
     setInitialsText('');
     setTextValue('');
+    setSelectedFontIdx(-1);
+    setSigDisplayName(signerName);
   };
 
-  const confirmField = () => {
+  const confirmField = async () => {
     if (!modalField) return;
     if (modalField.type === 'signature') {
-      if (!sigPadRef.current || sigPadRef.current.isEmpty()) { setError('Please draw your signature.'); return; }
-      const dataUrl = sigPadRef.current.toDataURL('image/png');
+      if (selectedFontIdx < 0) { setError('Please choose a signature style.'); return; }
+      if (!sigDisplayName.trim()) { setError('Please enter your name.'); return; }
+      const f = SIG_FONTS[selectedFontIdx];
+      const dataUrl = await renderFontSig(sigDisplayName.trim(), f.family, f.size, f.weight);
       setFilledFields(prev => ({ ...prev, [modalField.id]: dataUrl }));
+      setError('');
+      setModalField(null);
+      return;
     } else if (modalField.type === 'initials') {
       if (!initialsText.trim()) { setError('Please enter your initials.'); return; }
       setFilledFields(prev => ({ ...prev, [modalField.id]: initialsText.trim().toUpperCase() }));
@@ -170,11 +193,12 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
           const img = await pdfLibDoc.embedPng(imgBytes);
           const dims = img.scaleToFit(120, 40);
           pageObj.drawImage(img, { x: pdfX - dims.width / 2, y: pdfY - dims.height / 2, ...dims });
-          // Date below signature
-          const today = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-          pageObj.drawText(today, { x: pdfX - dims.width / 2, y: pdfY - dims.height / 2 - 12, size: 8, font: helvetica, color: rgb(0.3, 0.3, 0.3) });
+          const todaySig = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+          pageObj.drawText(todaySig, { x: pdfX - dims.width / 2, y: pdfY - dims.height / 2 - 12, size: 8, font: helvetica, color: rgb(0.3, 0.3, 0.3) });
         } else if (field.type === 'initials') {
-          pageObj.drawText(value, { x: pdfX - 12, y: pdfY - 8, size: 14, font: helvetica, color: rgb(0, 0, 0) });
+          pageObj.drawText(value, { x: pdfX - 12, y: pdfY - 4, size: 14, font: helvetica, color: rgb(0, 0, 0) });
+          const today = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+          pageObj.drawText(today, { x: pdfX - 22, y: pdfY - 18, size: 7, font: helvetica, color: rgb(0.4, 0.4, 0.4) });
         } else if (field.type === 'date') {
           pageObj.drawText(value, { x: pdfX - 40, y: pdfY - 8, size: 10, font: helvetica, color: rgb(0.2, 0.2, 0.2) });
         } else if (field.type === 'text') {
@@ -357,18 +381,39 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
 
             {modalField.type === 'signature' && (
               <>
-                <p style={{ margin: '0 0 12px', fontSize: '13px', color: '#666' }}>
-                  Use your mouse or finger to sign in the box below.
+                <p style={{ margin: '0 0 10px', fontSize: '13px', color: '#666' }}>
+                  Confirm your name and choose a style.
                 </p>
-                <div style={{ border: '2px solid #1A5BA6', borderRadius: '8px', overflow: 'hidden', background: '#fafafa' }}>
-                  <canvas ref={sigCanvasRef} width={400} height={150} style={{ display: 'block', width: '100%' }} />
+                <input
+                  value={sigDisplayName}
+                  onChange={e => setSigDisplayName(e.target.value)}
+                  placeholder="Full name"
+                  style={{ width: '100%', padding: '9px 12px', border: '1px solid #ddd', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', marginBottom: '12px' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {SIG_FONTS.map((f, i) => (
+                    <div
+                      key={f.label}
+                      onClick={() => setSelectedFontIdx(i)}
+                      style={{
+                        border: `2px solid ${selectedFontIdx === i ? '#1A5BA6' : '#ddd'}`,
+                        borderRadius: '8px',
+                        padding: '10px 16px',
+                        cursor: 'pointer',
+                        background: selectedFontIdx === i ? '#EBF3FF' : '#fafafa',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <span style={{ fontFamily: f.family, fontSize: f.size * 0.7, fontWeight: f.weight as any, color: '#111', lineHeight: 1.2 }}>
+                        {sigDisplayName || 'Your Name'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: selectedFontIdx === i ? '#1A5BA6' : '#aaa', fontWeight: 600 }}>{f.label}</span>
+                    </div>
+                  ))}
                 </div>
-                <button
-                  onClick={() => sigPadRef.current?.clear()}
-                  style={{ background: 'none', border: 'none', color: '#888', fontSize: '13px', cursor: 'pointer', marginTop: '6px', padding: 0 }}
-                >
-                  Clear
-                </button>
               </>
             )}
 
@@ -425,7 +470,13 @@ export default function SignClient({ token, pdfUrl, fields, signerName, document
               </button>
               <button
                 onClick={confirmField}
-                style={{ flex: 2, padding: '12px', border: 'none', borderRadius: '8px', background: FIELD_COLORS[modalField.type], color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: '15px' }}
+                disabled={modalField.type === 'signature' && selectedFontIdx < 0}
+                style={{
+                  flex: 2, padding: '12px', border: 'none', borderRadius: '8px',
+                  background: FIELD_COLORS[modalField.type], color: '#fff', fontWeight: 700, fontSize: '15px',
+                  cursor: (modalField.type === 'signature' && selectedFontIdx < 0) ? 'not-allowed' : 'pointer',
+                  opacity: (modalField.type === 'signature' && selectedFontIdx < 0) ? 0.4 : 1,
+                }}
               >
                 Confirm
               </button>

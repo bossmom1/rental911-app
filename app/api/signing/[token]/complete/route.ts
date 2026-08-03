@@ -3,7 +3,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase';
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM_EMAIL = 'Rental911 <onboarding@resend.dev>';
+const FROM_EMAIL = 'Rental911 <noreply@rental911.net>';
 
 export async function POST(
   request: NextRequest,
