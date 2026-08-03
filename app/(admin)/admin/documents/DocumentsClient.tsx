@@ -25,8 +25,8 @@ type SigningRequest = {
   status: 'pending' | 'signed' | 'expired';
   created_at: string;
   signed_at: string | null;
-  session_id: string | null;
-  recipient_index: number | null;
+  session_id?: string | null;
+  recipient_index?: number | null;
 };
 
 // ── Recipient colors ────────────────────────────────────────────────────────
