@@ -110,7 +110,7 @@ function buildSigningEmailHtml(name: string, title: string, url: string, noteBlo
     <td style="padding:32px;">
       <p style="font-size:16px;color:#222;margin:0 0 12px;">Hi ${name},</p>
       <p style="font-size:15px;color:#444;line-height:1.6;margin:0 0 12px;">
-        Christine Pollard has sent you a document for your signature:
+        Christine Pollard of Rental911 has sent you a document for your review and signature:
         <strong style="color:#222;">${title}</strong>
       </p>
       ${noteBlock}
