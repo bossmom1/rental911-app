@@ -6,10 +6,7 @@ import { Resend } from 'resend';
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = 'Rental911 <noreply@rental911.net>';
 
-const BASE_URL = (() => {
-  const url = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://rental911-app.vercel.app';
-  return url.startsWith('http://localhost') ? 'https://rental911-app.vercel.app' : url;
-})();
+type Recipient = { name: string; email: string };
 
 export async function POST(request: NextRequest) {
   const current = await getCurrentUser();
@@ -17,35 +14,41 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const formData    = await request.formData();
-  const file        = formData.get('file')           as File   | null;
-  const fieldsRaw   = formData.get('fields')         as string | null;
-  const recipientsRaw = formData.get('recipients')   as string | null;
+  const formData = await request.formData();
+  const file          = formData.get('file')          as File   | null;
+  const recipientsRaw = formData.get('recipients')    as string | null;
+  const fieldsRaw     = formData.get('fields')        as string | null;
   const documentTitle = (formData.get('documentTitle') as string | null)?.trim();
-  const emailNote   = (formData.get('emailNote')     as string | null)?.trim() || '';
+  const emailNote     = (formData.get('emailNote')    as string | null)?.trim() || '';
 
-  // ── Validation ─────────────────────────────────────────────────────────────
   if (!file || !documentTitle) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    return NextResponse.json({ error: 'Missing file or documentTitle' }, { status: 400 });
   }
 
-  type Recipient = { name: string; email: string };
+  // Parse recipients
   let recipients: Recipient[] = [];
   try { recipients = JSON.parse(recipientsRaw || '[]'); } catch { /* empty */ }
-  if (!recipients.length || recipients.some(r => !r.name?.trim() || !r.email?.trim())) {
-    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  if (recipients.length === 0) {
+    return NextResponse.json({ error: 'At least one recipient required' }, { status: 400 });
+  }
+  const valid = recipients.every(r => r.name?.trim() && r.email?.trim());
+  if (!valid) {
+    return NextResponse.json({ error: 'All recipients must have name and email' }, { status: 400 });
   }
 
-  type Field = { signer: number | 'admin'; type: string; page: number; xPct: number; yPct: number; [k: string]: unknown };
-  let allFields: Field[] = [];
-  try { allFields = JSON.parse(fieldsRaw || '[]'); } catch { /* empty fields */ }
+  // Parse fields (each has a `signer` property: number = recipient index)
+  let allFields: unknown[] = [];
+  try { allFields = JSON.parse(fieldsRaw || '[]'); } catch { /* empty */ }
 
-  // ── Upload PDF once under a shared session path ────────────────────────────
-  const admin     = createSupabaseAdminClient();
+  const admin = createSupabaseAdminClient();
+
+  // Generate a session_id to group all recipients for this send
   const sessionId = crypto.randomUUID();
-  const pdfPath   = `requests/${sessionId}/document.pdf`;
+  const isMulti   = recipients.length > 1;
 
-  const bytes = await file.arrayBuffer();
+  // Upload PDF once — shared across all recipients
+  const bytes   = await file.arrayBuffer();
+  const pdfPath = `sessions/${sessionId}/document.pdf`;
   const { error: uploadError } = await admin.storage
     .from('signing-documents')
     .upload(pdfPath, bytes, { contentType: 'application/pdf', upsert: false });
@@ -55,67 +58,74 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to upload document' }, { status: 500 });
   }
 
-  // ── Insert one signing_requests row per recipient ──────────────────────────
+  // Build signing URL base
+  const base = process.env.NEXT_PUBLIC_SITE_URL?.startsWith('http://localhost')
+    ? 'https://rental911-app.vercel.app'
+    : (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://rental911-app.vercel.app');
+
   const signingUrls: string[] = [];
 
+  // Insert one row per recipient, send one email per recipient
   for (let i = 0; i < recipients.length; i++) {
-    const { name, email } = recipients[i];
-    const token      = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
-    const fieldSlice = allFields.filter(f => f.signer === i);
+    const recipient = recipients[i];
+    const token     = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
 
-    const { data: record, error: dbError } = await admin
+    // Filter fields assigned to this recipient
+    const recipientFields = (allFields as Array<{ signer?: number | string }>)
+      .filter(f => f.signer === i);
+
+    const { error: dbError } = await admin
       .from('signing_requests')
       .insert({
         token,
-        document_title: documentTitle,
-        pdf_path:       pdfPath,
-        fields:         fieldSlice,
-        signer_name:    name,
-        signer_email:   email,
-        session_id:     sessionId,
-        recipient_index: i,
-      })
-      .select()
-      .single();
+        document_title:  documentTitle,
+        pdf_path:        pdfPath,
+        fields:          recipientFields,
+        signer_name:     recipient.name.trim(),
+        signer_email:    recipient.email.trim(),
+        session_id:      isMulti ? sessionId : null,
+        recipient_index: isMulti ? i : null,
+      });
 
-    if (dbError || !record) {
+    if (dbError) {
       console.error(`[signing/create] DB error for recipient ${i}:`, dbError);
-      return NextResponse.json({ error: 'Failed to create signing request' }, { status: 500 });
+      // Continue — don't fail the whole batch for one DB error, but log it
+      continue;
     }
 
-    const signingUrl = `${BASE_URL}/sign/${token}`;
+    const signingUrl = `${base}/sign/${token}`;
     signingUrls.push(signingUrl);
 
-    // Send invitation email to this recipient
+    // Send invitation email
     await resend.emails.send({
       from: FROM_EMAIL,
-      to: email,
+      to:   recipient.email.trim(),
       subject: `Action Required: Please sign "${documentTitle}"`,
-      html: buildSigningEmail(name, documentTitle, signingUrl, emailNote, recipients.length),
-    }).catch((err: unknown) => console.error(`[signing/create] Email error for recipient ${i}:`, err));
+      html: buildSigningEmail(recipient.name.trim(), documentTitle, signingUrl, emailNote, isMulti, i + 1, recipients.length),
+    }).catch(err => console.error(`[signing/create] Email error for recipient ${i}:`, err));
   }
 
-  return NextResponse.json({ signingUrls });
+  return NextResponse.json({ sessionId, signingUrls });
 }
 
-// ── Email builders ─────────────────────────────────────────────────────────────
-
 function buildSigningEmail(
-  name: string,
-  title: string,
-  url: string,
-  note: string,
-  totalRecipients: number,
+  name:         string,
+  title:        string,
+  url:          string,
+  note:         string,
+  isMulti:      boolean,
+  recipientNum: number,
+  totalCount:   number,
 ): string {
   const noteBlock = note
     ? `<div style="background:#EBF3FF;border-left:4px solid #1A5BA6;padding:16px 20px;border-radius:0 8px 8px 0;margin:0 0 28px;">
-         <p style="margin:0;font-size:14px;color:#333;line-height:1.7;white-space:pre-wrap;">${note.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+         <p style="margin:0;font-size:14px;color:#333;line-height:1.7;white-space:pre-wrap;">${note.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
        </div>`
     : '';
 
-  const multiNote = totalRecipients > 1
-    ? `<p style="font-size:14px;color:#666;margin:0 0 20px;">
-         This document requires signatures from ${totalRecipients} parties. Each party receives their own signing link.
+  const multiNote = isMulti
+    ? `<p style="font-size:13px;color:#888;margin:0 0 20px;">
+         Signer ${recipientNum} of ${totalCount} — your signature is required to complete this document.
        </p>`
     : '';
 
@@ -136,11 +146,11 @@ function buildSigningEmail(
   <tr>
     <td style="padding:32px;">
       <p style="font-size:16px;color:#222;margin:0 0 12px;">Hi ${name},</p>
+      ${multiNote}
       <p style="font-size:15px;color:#444;line-height:1.6;margin:0 0 12px;">
         Christine Pollard of Rental911 has sent you a document for your review and signature:
         <strong style="color:#222;">${title}</strong>
       </p>
-      ${multiNote}
       ${noteBlock}
       <p style="font-size:15px;color:#444;line-height:1.6;margin:0 0 28px;">
         Click the button below to review and sign. No account or download required —
