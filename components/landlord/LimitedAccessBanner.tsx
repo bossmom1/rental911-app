@@ -12,7 +12,7 @@ export function LimitedAccessBanner() {
         activated.
       </p>
       <a
-        href="https://survey.rental911.net"
+        href="https://survey.rental911.net/onboarding-survey-page"
         target="_blank"
         rel="noopener noreferrer"
         className="mt-3 inline-block rounded-lg bg-gold px-4 py-2 text-sm font-bold text-navy hover:bg-gold/90 transition-colors"

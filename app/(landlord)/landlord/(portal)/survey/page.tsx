@@ -55,7 +55,7 @@ export default async function MySurveyPage() {
             Complete the survey to get started.
           </p>
           <a
-            href="https://survey.rental911.net"
+            href="https://survey.rental911.net/onboarding-survey-page"
             target="_blank"
             rel="noopener noreferrer"
             className="mt-4 inline-block rounded-lg bg-gold px-5 py-2 text-sm font-bold text-navy hover:bg-gold/90 transition-colors"
