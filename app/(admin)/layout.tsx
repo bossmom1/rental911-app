@@ -6,6 +6,7 @@ import type { NavItem } from '@/components/ui/SidebarNav';
 
 const NAV: NavItem[] = [
   { label: 'Dashboard', href: '/admin/dashboard' },
+  { label: 'Onboarding', href: '/admin/onboarding-submissions' },
   { label: 'Properties', href: '/admin/properties' },
   { label: 'Landlords', href: '/admin/landlords' },
   { label: 'Tenants', href: '/admin/tenants' },
