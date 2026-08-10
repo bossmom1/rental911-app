@@ -3,6 +3,7 @@ import type Stripe from 'stripe';
 import { createSupabaseAdminClient } from '@/lib/supabase';
 import { getStripe } from '@/lib/stripe';
 import { createGhlContact, addContactTag, enrollInWorkflow } from '@/lib/ghl';
+import { sendAgreement } from '@/lib/agreement-sender';
 
 /**
  * POST /api/stripe/webhook-landlord-onboarding — records landlord onboarding-fee
@@ -20,6 +21,12 @@ import { createGhlContact, addContactTag, enrollInWorkflow } from '@/lib/ghl';
  *
  * Writes with the service-role client: Stripe is unauthenticated to us, so
  * there is no session to satisfy RLS.
+ *
+ * Agreement flow:
+ *   After payment succeeds, sendAgreement() is called (best-effort, non-blocking).
+ *   It renders the correct tier PDF, uploads to Supabase Storage, inserts a
+ *   signing_requests row, and emails the client a signing link.
+ *   Failures are logged but never fail the webhook (200 is always returned to Stripe).
  */
 
 export const runtime = 'nodejs';
@@ -46,6 +53,8 @@ async function notifyGhl(
   await addContactTag(contactId, 'onboarding-fee-paid');
   await enrollInWorkflow(contactId, process.env.GHL_ONBOARDING_WORKFLOW_ID);
 }
+
+// ─── Checkout Session (hosted checkout flow) ──────────────────────────────────
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const paymentId = session.metadata?.rental911_landlord_onboarding_payment_id;
@@ -95,15 +104,34 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .maybeSingle();
   if (landlordUpdateError) throw new Error(`users update failed: ${landlordUpdateError.message}`);
 
+  // ── GHL sync (best-effort) ────────────────────────────────────────────────
   if (landlord) {
     try {
       await notifyGhl(landlord, updated.tier);
     } catch (err) {
-      // GHL sync is best-effort — never fail the webhook over it.
       console.error('[stripe/webhook-landlord-onboarding] GHL sync failed (non-blocking):', err);
     }
   }
+
+  // ── Auto-send agreement for signing (best-effort) ─────────────────────────
+  // Contact info comes from the users table (landlord has an account at checkout time).
+  if (landlord?.email && landlord?.full_name) {
+    try {
+      const result = await sendAgreement({
+        tier: updated.tier,
+        clientName: landlord.full_name,
+        clientEmail: landlord.email,
+      });
+      if (!result.ok) {
+        console.error('[stripe/webhook-landlord-onboarding] sendAgreement failed (checkout):', result.error);
+      }
+    } catch (err) {
+      console.error('[stripe/webhook-landlord-onboarding] sendAgreement threw (checkout, non-blocking):', err);
+    }
+  }
 }
+
+// ─── Checkout Session expired ─────────────────────────────────────────────────
 
 async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
   const paymentId = session.metadata?.rental911_landlord_onboarding_payment_id;
@@ -130,6 +158,8 @@ async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
   if (landlordError) throw new Error(`users update failed: ${landlordError.message}`);
 }
 
+// ─── Subscription status sync ─────────────────────────────────────────────────
+
 /** Keeps users.subscription_status fresh — same mirroring pattern as account.updated → stripe_charges_enabled. */
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   const admin = createSupabaseAdminClient();
@@ -140,11 +170,13 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   if (error) throw new Error(`users subscription_status update failed: ${error.message}`);
 }
 
+// ─── PaymentIntent (inline Card Element checkout pages) ───────────────────────
+
 /**
  * The public checkout pages (inline Card Element, `app/checkout/*`) charge
  * the one-time portion via a directly confirmed PaymentIntent rather than a
  * Checkout Session — there's no account yet at charge time, so `landlord_id`
- * is typically null and GHL contact info comes from the payment row's own
+ * is typically null and contact info comes from the payment row's own
  * contact columns rather than a `users` lookup.
  */
 async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
@@ -175,6 +207,7 @@ async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
     await admin.from('users').update({ onboarding_fee_status: 'paid' }).eq('id', updated.landlord_id);
   }
 
+  // ── GHL sync (best-effort) ────────────────────────────────────────────────
   if (updated.contact_email) {
     try {
       await notifyGhl(
@@ -182,8 +215,24 @@ async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
         updated.tier
       );
     } catch (err) {
-      // GHL sync is best-effort — never fail the webhook over it.
       console.error('[stripe/webhook-landlord-onboarding] GHL sync failed (non-blocking):', err);
+    }
+  }
+
+  // ── Auto-send agreement for signing (best-effort) ─────────────────────────
+  // Contact info comes from the payment row (no user account required at this stage).
+  if (updated.contact_email && updated.contact_name) {
+    try {
+      const result = await sendAgreement({
+        tier: updated.tier,
+        clientName: updated.contact_name,
+        clientEmail: updated.contact_email,
+      });
+      if (!result.ok) {
+        console.error('[stripe/webhook-landlord-onboarding] sendAgreement failed (payment_intent):', result.error);
+      }
+    } catch (err) {
+      console.error('[stripe/webhook-landlord-onboarding] sendAgreement threw (payment_intent, non-blocking):', err);
     }
   }
 }
@@ -196,6 +245,8 @@ async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
 async function handlePaymentIntentFailed(intent: Stripe.PaymentIntent) {
   console.warn('[stripe/webhook-landlord-onboarding] payment_intent.payment_failed', intent.id, intent.last_payment_error?.message);
 }
+
+// ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   const signature = request.headers.get('stripe-signature');
