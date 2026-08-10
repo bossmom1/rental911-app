@@ -12,6 +12,7 @@ const NAV: NavItem[] = [
   { label: 'Financials', href: '/landlord/financials' },
   { label: 'P&L Reports', href: '/landlord/financials/reports' },
   { label: 'Tax Export', href: '/landlord/financials/export' },
+  { label: 'Verifications', href: '/landlord/verifications' },
   { label: 'My Survey', href: '/landlord/survey' },
 ];
 
