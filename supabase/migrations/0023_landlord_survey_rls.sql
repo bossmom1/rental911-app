@@ -15,7 +15,7 @@ CREATE POLICY "Landlords can view own submission"
   USING (
     landlord_email = (
       SELECT email
-      FROM public.profiles
+      FROM public.users
       WHERE id = auth.uid()
     )
   );

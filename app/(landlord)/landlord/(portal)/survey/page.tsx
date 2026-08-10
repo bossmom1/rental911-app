@@ -30,7 +30,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default async function MySurveyPage() {
   const supabase = createSupabaseServerClient(cookies());
   const current = await getCurrentUser();
-  const email = current?.profile?.email;
+  const email = current?.email;
 
   const { data: sub } = email
     ? await supabase
