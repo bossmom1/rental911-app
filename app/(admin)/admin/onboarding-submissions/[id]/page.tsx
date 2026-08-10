@@ -51,15 +51,11 @@ export default async function SubmissionDetail({
     <>
       <PageHeader
         title={s.landlord_name || 'Unnamed Submission'}
-        subtitle={
-          <>
-            <Badge value={s.status} />
-            <span className="ml-2 text-ink/60 text-sm">
-              Submitted {fmtDateTime(s.submitted_at)}
-            </span>
-          </>
-        }
+        subtitle={s.submitted_at ? `Submitted ${fmtDateTime(s.submitted_at)}` : undefined}
       />
+      <div className="mb-4">
+        <Badge value={s.status} />
+      </div>
 
       <div className="flex gap-3 mb-8">
         <Link
