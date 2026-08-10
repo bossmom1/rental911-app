@@ -8,11 +8,17 @@ import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/sup
 import { getCurrentUser } from '@/lib/auth';
 import { notifyVendorOfDispatch } from '@/lib/dispatch';
 import { submitClaimInvoice } from '@/lib/afc';
+import { sendMaintenanceApprovalEmail } from '@/lib/email';
 
 /**
  * Tenant creates a maintenance request. A chat thread is opened automatically:
  * a system message announces the request, followed by the tenant's description
  * as the first message.
+ *
+ * If the optional `estimated_cost_cents` field is provided and exceeds the
+ * landlord's `maintenance_threshold_cents`, the request is created with
+ * `status: 'pending_approval'` and an approval email is sent to the landlord.
+ * Otherwise the request goes straight to `status: 'open'`.
  */
 export async function createRequest(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const current = await getCurrentUser();
@@ -38,6 +44,28 @@ export async function createRequest(formData: FormData): Promise<{ ok: boolean; 
   const priority = String(formData.get('priority') || 'medium');
   if (!title) return { ok: false, error: 'Please add a title.' };
 
+  // Optional estimated cost from the form (in cents).
+  const rawCost = formData.get('estimated_cost_cents');
+  const estimatedCostCents = rawCost ? parseInt(String(rawCost), 10) : null;
+
+  // Determine whether this request needs landlord approval.
+  let status: 'open' | 'pending_approval' = 'open';
+  let billingAmountCents: number | null = null;
+
+  if (estimatedCostCents && estimatedCostCents > 0 && lease.landlord_id) {
+    const { data: landlordUser } = await supabase
+      .from('users')
+      .select('maintenance_threshold_cents, email, full_name')
+      .eq('id', lease.landlord_id)
+      .maybeSingle();
+
+    const threshold = landlordUser?.maintenance_threshold_cents ?? 50000;
+    if (estimatedCostCents > threshold) {
+      status = 'pending_approval';
+      billingAmountCents = estimatedCostCents;
+    }
+  }
+
   const { data: request, error } = await supabase
     .from('maintenance_requests')
     .insert({
@@ -48,13 +76,55 @@ export async function createRequest(formData: FormData): Promise<{ ok: boolean; 
       description,
       category,
       priority: priority as any,
-      status: 'open',
+      status,
+      billing_amount_cents: billingAmountCents,
     })
     .select('id')
     .single();
 
   if (error || !request) {
     return { ok: false, error: error?.message || 'Could not create request.' };
+  }
+
+  // Send approval email when request is above threshold (non-blocking).
+  if (status === 'pending_approval' && lease.landlord_id) {
+    waitUntil(
+      (async () => {
+        try {
+          const { data: landlordUser } = await supabase
+            .from('users')
+            .select('email, full_name, maintenance_threshold_cents')
+            .eq('id', lease.landlord_id!)
+            .maybeSingle();
+
+          const { data: unit } = await supabase
+            .from('units')
+            .select('unit_number, property:properties(address, name)')
+            .eq('id', lease.unit_id!)
+            .maybeSingle();
+
+          const propertyAddress =
+            (unit as any)?.property?.address ??
+            (unit as any)?.property?.name ??
+            'your property';
+
+          const threshold = landlordUser?.maintenance_threshold_cents ?? 50000;
+          const thresholdFormatted = `$${(threshold / 100).toFixed(0)}`;
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://rental911.net';
+
+          await sendMaintenanceApprovalEmail({
+            to: landlordUser?.email ? [landlordUser.email] : [],
+            landlordName: landlordUser?.full_name ?? 'Landlord',
+            propertyAddress,
+            requestTitle: title,
+            thresholdFormatted,
+            requestUrl: `${appUrl}/landlord/maintenance/${request.id}`,
+          });
+        } catch (emailErr) {
+          console.error('[maintenance] approval email failed (non-blocking):', emailErr);
+        }
+      })()
+    );
   }
 
   // AFC Home Club: if this property is on the AFC warranty path, file the
@@ -104,13 +174,17 @@ export async function createRequest(formData: FormData): Promise<{ ok: boolean; 
   }
 
   // Auto-open the chat thread.
+  const systemMessage =
+    status === 'pending_approval'
+      ? 'Request submitted and is pending landlord approval before dispatch. Your landlord has been notified.'
+      : 'Request opened. Your landlord and the Rental911 team have been notified and will respond here shortly.';
+
   await supabase.from('maintenance_chat').insert([
     {
       request_id: request.id,
       sender_id: null,
       sender_role: 'system',
-      message:
-        'Request opened. Your landlord and the Rental911 team have been notified and will respond here shortly.',
+      message: systemMessage,
     },
     {
       request_id: request.id,

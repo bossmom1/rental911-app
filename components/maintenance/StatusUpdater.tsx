@@ -8,6 +8,7 @@ import { Label, Select } from '@/components/ui/Field';
 
 const STATUSES: MaintenanceStatus[] = [
   'open',
+  'pending_approval',
   'in_progress',
   'vendor_assigned',
   'completed',
@@ -17,6 +18,9 @@ const STATUSES: MaintenanceStatus[] = [
 /**
  * Admin/landlord control to change a maintenance request's status.
  * Closing the request fires the Anthropic summary generation (non-blocking).
+ * Marking `completed` fires the billing check (non-blocking) — if the request
+ * was above the landlord's threshold (approved_at is set) and has a
+ * billing_amount_cents, a Stripe PaymentIntent is created server-side.
  */
 export function StatusUpdater({
   requestId,
@@ -52,6 +56,16 @@ export function StatusUpdater({
     // shouldn't undo the status change the admin/landlord just made.
     if (next === 'completed' || next === 'closed') {
       await supabase.from('vendor_dispatches').update({ completion_confirmed: true }).eq('request_id', requestId);
+    }
+
+    // When the request is marked completed, trigger billing for above-threshold
+    // requests (non-blocking — fails silently so the status change always lands).
+    if (next === 'completed') {
+      fetch('/api/maintenance/trigger-billing', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ requestId }),
+      }).catch(() => {});
     }
 
     // Generate the AI chat summary on close — non-blocking, never blocks the status change.

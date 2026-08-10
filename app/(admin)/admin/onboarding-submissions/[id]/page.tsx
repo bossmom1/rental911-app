@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/ui/PortalShell';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { fmtDateTime } from '@/lib/format';
-import { markReviewedAction } from '../actions';
+import { markReviewedAction, setThresholdAction } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +47,17 @@ export default async function SubmissionDetail({
 
   if (!s) notFound();
 
+  // Determine the threshold that would be pushed (for display in button label).
+  let thresholdPreview = '$500 (default)';
+  if (s.maintenance_threshold_choice) {
+    const choice = (s.maintenance_threshold_choice as string).toLowerCase().trim();
+    if (choice === 'custom' || choice === 'other') {
+      thresholdPreview = s.maintenance_threshold_custom
+        ? `Custom: ${s.maintenance_threshold_custom}`
+        : 'Custom (amount missing)';
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -67,7 +78,7 @@ export default async function SubmissionDetail({
       </div>
 
       {/* Admin actions */}
-      <div className="flex gap-3 mb-8 flex-wrap">
+      <div className="flex gap-3 mb-8 flex-wrap items-center">
         {s.status === 'new' && (
           <form action={markReviewedAction.bind(null, s.id)}>
             <Button type="submit" variant="outline">
@@ -85,7 +96,15 @@ export default async function SubmissionDetail({
           </p>
         )}
         {s.converted_landlord_id && (
-          <Badge value="converted" />
+          <>
+            <Badge value="converted" />
+            {/* Set Threshold — only visible when a landlord account is linked */}
+            <form action={setThresholdAction.bind(null, s.id)}>
+              <Button type="submit" variant="outline" title={`Will set: ${thresholdPreview}`}>
+                Set Threshold ({thresholdPreview})
+              </Button>
+            </form>
+          </>
         )}
       </div>
 

@@ -216,3 +216,256 @@ export async function sendAfcManualClaimEmail(input: AfcManualClaimEmailInput): 
     return false;
   }
 }
+
+export interface MaintenanceApprovalEmailInput {
+  to: string[];
+  landlordName: string;
+  propertyAddress: string;
+  requestTitle: string;
+  /** Pre-formatted threshold, e.g. "$500" */
+  thresholdFormatted: string;
+  /** Full URL to the landlord's maintenance detail page */
+  requestUrl: string;
+}
+
+/**
+ * Sent to a landlord when a tenant maintenance request exceeds their
+ * authorization threshold. The landlord must approve before dispatch begins.
+ */
+export async function sendMaintenanceApprovalEmail(
+  input: MaintenanceApprovalEmailInput
+): Promise<boolean> {
+  const resend = getResend();
+  if (!resend) {
+    console.warn('[email] RESEND_API_KEY not set — skipping maintenance approval email');
+    return false;
+  }
+  try {
+    const { error } = await resend.emails.send({
+      from: ALERTS_FROM_EMAIL,
+      to: input.to,
+      subject: `Maintenance approval needed — ${input.propertyAddress}`,
+      html: `
+        <p>Hi ${input.landlordName},</p>
+        <p>
+          A maintenance request at <strong>${input.propertyAddress}</strong>
+          requires your approval before work can begin.
+        </p>
+        <p><strong>Request:</strong> ${input.requestTitle}</p>
+        <p>
+          The estimated repair cost exceeds your authorization threshold of
+          <strong>${input.thresholdFormatted}</strong>.
+        </p>
+        <p>
+          <a href="${input.requestUrl}" style="background:#0C447C;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;font-family:sans-serif;">
+            View &amp; Approve Request
+          </a>
+        </p>
+        <p>— Rental911</p>
+      `,
+    });
+    if (error) throw new Error(error.message);
+    return true;
+  } catch (err) {
+    console.error('[email] sendMaintenanceApprovalEmail failed (non-blocking):', err);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Employment Verification emails
+// ---------------------------------------------------------------------------
+
+export interface EmployerVerificationRequestEmailInput {
+  to: string[];
+  tenantName: string;
+  employerContactName?: string;
+  formUrl: string;
+}
+
+/**
+ * Sent to the employer when an employment verification is triggered.
+ * The email links directly to the public form — no login required.
+ */
+export async function sendEmployerVerificationRequestEmail(
+  input: EmployerVerificationRequestEmailInput
+): Promise<boolean> {
+  const resend = getResend();
+  if (!resend) {
+    console.warn('[email] RESEND_API_KEY not set — skipping employer verification email');
+    return false;
+  }
+
+  const greeting = input.employerContactName
+    ? `Hi ${input.employerContactName},`
+    : 'Hello,';
+
+  try {
+    const { error } = await resend.emails.send({
+      from: ALERTS_FROM_EMAIL,
+      to: input.to,
+      subject: `Employment Verification Request — ${input.tenantName}`,
+      html: `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f0f7ff;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td>
+<table width="600" align="center" cellpadding="0" cellspacing="0"
+  style="background:#fff;margin:24px auto;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.10);">
+  <tr>
+    <td style="background:#0C447C;padding:24px 32px;">
+      <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;">
+        Rental<span style="color:#EF9F27;">911</span>
+      </h1>
+      <p style="margin:4px 0 0;color:#B5D4F4;font-size:13px;">Employment Verification Request</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:32px;">
+      <p style="font-size:16px;color:#222;margin:0 0 16px;">${greeting}</p>
+      <p style="font-size:15px;color:#444;line-height:1.7;margin:0 0 16px;">
+        A rental application is in progress for <strong>${input.tenantName}</strong>.
+        As their employer, you have been asked to complete a brief employment verification form.
+      </p>
+      <p style="font-size:15px;color:#444;line-height:1.7;margin:0 0 28px;">
+        No account or download required — the form takes less than 2 minutes to complete.
+        Your information is kept confidential and used solely for rental qualification.
+      </p>
+      <div style="text-align:center;margin-bottom:32px;">
+        <a href="${input.formUrl}"
+           style="background:#0C447C;color:#fff;padding:16px 48px;border-radius:8px;
+                  text-decoration:none;font-weight:700;font-size:16px;display:inline-block;">
+          Complete Employment Verification →
+        </a>
+      </div>
+      <p style="font-size:13px;color:#888;border-top:1px solid #eee;padding-top:16px;margin:0;">
+        This link expires in 14 days. If you have questions, contact
+        <a href="mailto:info@rental911.net" style="color:#0C447C;">info@rental911.net</a>
+      </p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:16px 32px;background:#f8f8f8;text-align:center;font-size:12px;color:#aaa;">
+      Rental911 &nbsp;|&nbsp; rental911.net &nbsp;|&nbsp; Licensed Maryland Realtor — Samson Properties
+    </td>
+  </tr>
+</table>
+</td></tr></table>
+</body>
+</html>`,
+    });
+    if (error) throw new Error(error.message);
+    return true;
+  } catch (err) {
+    console.error('[email] sendEmployerVerificationRequestEmail failed (non-blocking):', err);
+    return false;
+  }
+}
+
+export interface EmployerVerificationSummaryEmailInput {
+  to: string[];
+  landlordName: string;
+  tenantName: string;
+  employerLabel: string; // company name or email fallback
+  employerContactName?: string;
+  jobTitle: string;
+  employmentStatus: string;
+  monthlyGrossIncome: number;
+  viewUrl: string;
+}
+
+/**
+ * Sent to the landlord once the employer submits the employment verification form.
+ * Rental911 does NOT act on the information — it's the landlord's responsibility.
+ */
+export async function sendEmployerVerificationSummaryEmail(
+  input: EmployerVerificationSummaryEmailInput
+): Promise<boolean> {
+  const resend = getResend();
+  if (!resend) {
+    console.warn('[email] RESEND_API_KEY not set — skipping verification summary email');
+    return false;
+  }
+
+  const statusLabel = input.employmentStatus.replace(/_/g, ' ');
+  const incomeFormatted = `$${Number(input.monthlyGrossIncome).toLocaleString('en-US')}`;
+
+  try {
+    const { error } = await resend.emails.send({
+      from: ALERTS_FROM_EMAIL,
+      to: input.to,
+      subject: `Employment Verification Filed — ${input.tenantName}`,
+      html: `<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;font-family:Arial,sans-serif;background:#f0f7ff;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td>
+<table width="600" align="center" cellpadding="0" cellspacing="0"
+  style="background:#fff;margin:24px auto;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.10);">
+  <tr>
+    <td style="background:#0C447C;padding:24px 32px;">
+      <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;">
+        Rental<span style="color:#EF9F27;">911</span>
+      </h1>
+      <p style="margin:4px 0 0;color:#B5D4F4;font-size:13px;">Employment Verification Complete</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:32px;">
+      <p style="font-size:16px;color:#222;margin:0 0 16px;">Hi ${input.landlordName},</p>
+      <p style="font-size:15px;color:#444;line-height:1.7;margin:0 0 20px;">
+        The employer for <strong>${input.tenantName}</strong> has completed and submitted
+        their employment verification. A copy has been filed in both your portal and
+        your tenant's portal.
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0"
+        style="background:#EBF3FF;border-radius:8px;padding:20px;margin-bottom:24px;">
+        <tr><td style="padding:6px 0;font-size:14px;color:#333;">
+          <strong style="color:#0C447C;">Employer:</strong> ${input.employerLabel}${input.employerContactName ? ` (${input.employerContactName})` : ''}
+        </td></tr>
+        <tr><td style="padding:6px 0;font-size:14px;color:#333;">
+          <strong style="color:#0C447C;">Job Title:</strong> ${input.jobTitle}
+        </td></tr>
+        <tr><td style="padding:6px 0;font-size:14px;color:#333;">
+          <strong style="color:#0C447C;">Employment Status:</strong> <span style="text-transform:capitalize;">${statusLabel}</span>
+        </td></tr>
+        <tr><td style="padding:6px 0;font-size:14px;color:#333;">
+          <strong style="color:#0C447C;">Monthly Gross Income:</strong> ${incomeFormatted}
+        </td></tr>
+      </table>
+
+      <p style="font-size:14px;color:#888;margin:0 0 24px;line-height:1.6;">
+        Rental911 collects and files this information only. Acting on the verification
+        is your responsibility as the landlord.
+      </p>
+
+      <div style="text-align:center;margin-bottom:32px;">
+        <a href="${input.viewUrl}"
+           style="background:#0C447C;color:#fff;padding:14px 40px;border-radius:8px;
+                  text-decoration:none;font-weight:700;font-size:15px;display:inline-block;">
+          View Full Response →
+        </a>
+      </div>
+
+      <p style="font-size:13px;color:#888;border-top:1px solid #eee;padding-top:16px;margin:0;">
+        Questions? Contact us at
+        <a href="mailto:info@rental911.net" style="color:#0C447C;">info@rental911.net</a>
+      </p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:16px 32px;background:#f8f8f8;text-align:center;font-size:12px;color:#aaa;">
+      Rental911 &nbsp;|&nbsp; rental911.net &nbsp;|&nbsp; Licensed Maryland Realtor — Samson Properties
+    </td>
+  </tr>
+</table>
+</td></tr></table>
+</body>
+</html>`,
+    });
+    if (error) throw new Error(error.message);
+    return true;
+  } catch (err) {
+    console.error('[email] sendEmployerVerificationSummaryEmail failed (non-blocking):', err);
+    return false;
+  }
+}
