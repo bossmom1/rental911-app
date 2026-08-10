@@ -12,6 +12,7 @@ const NAV: NavItem[] = [
   { label: 'Financials', href: '/landlord/financials' },
   { label: 'P&L Reports', href: '/landlord/financials/reports' },
   { label: 'Tax Export', href: '/landlord/financials/export' },
+  { label: 'My Survey', href: '/landlord/survey' },
 ];
 
 export default async function LandlordPortalLayout({
