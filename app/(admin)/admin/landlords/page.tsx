@@ -36,7 +36,6 @@ export default async function AdminLandlords() {
             'Landlord',
             'Properties',
             'Onboarding',
-            'Onboarding Fee',
             'Subscription',
             'Full Access',
             'P&L',
@@ -54,6 +53,11 @@ export default async function AdminLandlords() {
                     {u.full_name || '—'}
                   </p>
                   <p className="text-ink/60">{u.email}</p>
+                  {u.onboarding_fee_status === 'paid' && (
+                    <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                      ✓ Fee paid
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3">{propCount}</td>
                 <td className="px-4 py-3">
@@ -64,9 +68,6 @@ export default async function AdminLandlords() {
                       Step {u.onboarding_step} / 8
                     </span>
                   )}
-                </td>
-                <td className="px-4 py-3">
-                  <Badge value={u.onboarding_fee_status ?? 'not_started'} />
                 </td>
                 <td className="px-4 py-3">
                   <Badge value={u.subscription_status} />
