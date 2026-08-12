@@ -1,74 +1,99 @@
-import Link from 'next/link';
-import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase';
 import { PageHeader } from '@/components/ui/PortalShell';
-import { PnlReportView } from '@/components/financials/PnlReportView';
-import {
-  buildPnlReport,
-  formatReferenceDateParam,
-  parsePeriod,
-  parseReferenceDate,
-  shiftRangeStart,
-} from '@/lib/pnl';
+import { PnlReport } from '@/app/(landlord)/landlord/(portal)/financials/reports/PnlReport';
+import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
-/**
- * Admin-only view of a single landlord's P&L — same report/PDF/period logic
- * as /landlord/financials/reports, just scoped to `landlordId` instead of
- * the caller's own id. The admin server client already bypasses the
- * landlord-only RLS restriction on properties/leases/rent_payments (see
- * `*_admin_all` policies in supabase/schema.sql via `is_admin()`); the
- * landlordId param is what narrows that otherwise-platform-wide access down
- * to one landlord (see lib/pnl.ts buildPnlReport).
- */
-export default async function AdminLandlordPnlReports({
+export default async function AdminLandlordReportsPage({
   params,
   searchParams,
 }: {
   params: { landlordId: string };
-  searchParams: { period?: string; date?: string };
+  searchParams: { period?: string; year?: string; quarter?: string; month?: string };
 }) {
   const supabase = createSupabaseServerClient(cookies());
 
-  const { data: landlord } = await supabase
-    .from('users')
-    .select('id, full_name, email')
-    .eq('id', params.landlordId)
-    .eq('role', 'landlord')
-    .maybeSingle();
+  const [{ data: landlord }, { data: properties }] = await Promise.all([
+    supabase
+      .from('users')
+      .select('id, full_name, email')
+      .eq('id', params.landlordId)
+      .single(),
+    supabase
+      .from('properties')
+      .select(`
+        id, name, address,
+        units (
+          id, unit_number, monthly_rent, status,
+          leases (
+            id, monthly_rent, status, start_date, end_date,
+            rent_payments (
+              id, amount, status, due_date, paid_date
+            )
+          )
+        )
+      `)
+      .eq('landlord_id', params.landlordId)
+      .order('name'),
+  ]);
+
   if (!landlord) notFound();
 
-  const period = parsePeriod(searchParams.period);
-  const referenceDate = parseReferenceDate(searchParams.date);
-  const referenceDateParam = formatReferenceDateParam(referenceDate);
-  const report = await buildPnlReport(supabase, period, referenceDate, landlord.id);
+  const period = (searchParams.period as 'month' | 'quarter' | 'year') || 'month';
+  const now = new Date();
+  const year = Number(searchParams.year || now.getFullYear());
+  const quarter = Number(searchParams.quarter || Math.ceil((now.getMonth() + 1) / 3));
+  const month = Number(searchParams.month || now.getMonth() + 1);
 
-  const basePath = `/admin/landlords/${landlord.id}/financials/reports`;
-  const prevDateParam = formatReferenceDateParam(shiftRangeStart(report.range, -1));
-  const nextDateParam = formatReferenceDateParam(shiftRangeStart(report.range, 1));
+  let rangeStart: string;
+  let rangeEnd: string;
+  if (period === 'month') {
+    rangeStart = `${year}-${String(month).padStart(2, '0')}-01`;
+    const last = new Date(year, month, 0).getDate();
+    rangeEnd = `${year}-${String(month).padStart(2, '0')}-${last}`;
+  } else if (period === 'quarter') {
+    const qStart = (quarter - 1) * 3 + 1;
+    const qEnd = qStart + 2;
+    rangeStart = `${year}-${String(qStart).padStart(2, '0')}-01`;
+    const last = new Date(year, qEnd, 0).getDate();
+    rangeEnd = `${year}-${String(qEnd).padStart(2, '0')}-${last}`;
+  } else {
+    rangeStart = `${year}-01-01`;
+    rangeEnd = `${year}-12-31`;
+  }
 
   return (
     <>
       <PageHeader
-        title={`P&L Reports — ${landlord.full_name || landlord.email}`}
-        subtitle="Rent due, collected, and outstanding by property and unit."
-        action={
-          <Link href="/admin/landlords" className="text-navy underline">
-            Back to Landlords
-          </Link>
-        }
+        title={`${landlord.full_name || landlord.email} — P&L Reports`}
+        subtitle={landlord.email}
       />
-      <PnlReportView
-        report={report}
+
+      <div className="mb-4">
+        <Link href="/admin/landlords" className="text-sm text-navy underline">
+          ← Back to Landlords
+        </Link>
+        {' · '}
+        <a
+          href={`/api/landlord/financials/export?landlordId=${params.landlordId}&year=${year}`}
+          download
+          className="text-sm text-navy underline"
+        >
+          Download {year} CSV
+        </a>
+      </div>
+
+      <PnlReport
+        properties={properties ?? []}
         period={period}
-        basePath={basePath}
-        referenceDateParam={referenceDateParam}
-        prevHref={`${basePath}?period=${period}&date=${prevDateParam}`}
-        nextHref={`${basePath}?period=${period}&date=${nextDateParam}`}
-        pdfHref={`/api/financials/pnl-pdf?period=${period}&date=${referenceDateParam}&landlordId=${landlord.id}`}
-        emptyMessage="This landlord's P&L will populate once they have active leases and collected rent."
+        year={year}
+        quarter={quarter}
+        month={month}
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
       />
     </>
   );
