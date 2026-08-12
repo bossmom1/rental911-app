@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase';
-import { complianceItemLabel } from '@/lib/compliance';
+import { complianceTypeLabel } from '@/lib/compliance';
 import { fmtDate } from '@/lib/format';
 
 /**
@@ -46,7 +46,7 @@ export async function AlertBanners() {
           <ul className="mt-1 space-y-0.5 text-ink">
             {compliance.slice(0, 4).map((c) => (
               <li key={c.id}>
-                {c.property?.name ?? 'A property'} — {complianceItemLabel(c.type)}{' '}
+                {c.property?.name ?? 'A property'} — {complianceTypeLabel(c.type)}{' '}
                 {c.status === 'expired' ? 'expired' : 'expires'} {fmtDate(c.expiry_date)}
               </li>
             ))}

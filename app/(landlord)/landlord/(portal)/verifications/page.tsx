@@ -17,7 +17,7 @@ type VerificationRow = {
   status: string;
   sent_at: string;
   completed_at: string | null;
-  tenant: { full_name: string | null } | null;
+  tenant: { full_name: string | null }[] | null;
 };
 
 export default async function LandlordVerificationsPage() {
@@ -54,7 +54,7 @@ export default async function LandlordVerificationsPage() {
           {rows.map((v) => (
             <tr key={v.id}>
               <td className="px-4 py-3 font-display font-bold text-navy">
-                {v.tenant?.full_name ?? '—'}
+                {v.tenant?.[0]?.full_name ?? '—'}
               </td>
               <td className="px-4 py-3">
                 <p>{v.employer_name ?? v.employer_email}</p>
