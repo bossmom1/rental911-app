@@ -9,11 +9,10 @@ import {
 import { getCurrentUser } from '@/lib/auth';
 import { syncContact } from '@/lib/ghl';
 import { createComplianceItems } from '@/lib/compliance';
-// TODO: import { sendEmploymentVerification } from '@/lib/employment-verification';
-// Uncomment the import above once employer contact fields are collected in the
-// AddTenantForm (employer_email, employer_name, employer_contact_name inputs).
+import { sendEmploymentVerification } from '@/lib/employment-verification';
 
 type Result = { ok: boolean; error?: string };
+type AddTenantResult = Result & { tenantId?: string; verificationSent?: boolean };
 
 async function landlord() {
   const current = await getCurrentUser();
@@ -78,7 +77,7 @@ export async function addUnit(formData: FormData): Promise<Result> {
 }
 
 /** Create a tenant Auth account + open a lease on the chosen unit. */
-export async function addTenant(formData: FormData): Promise<Result> {
+export async function addTenant(formData: FormData): Promise<AddTenantResult> {
   try {
     const me = await landlord();
     const unitId = String(formData.get('unit_id') || '');
@@ -94,7 +93,7 @@ export async function addTenant(formData: FormData): Promise<Result> {
     // Confirm the unit belongs to this landlord (defense against tampering).
     const { data: unit } = await admin
       .from('units')
-      .select('id, monthly_rent, property:properties(landlord_id, id)')
+      .select('id, monthly_rent, property_id, property:properties(landlord_id)')
       .eq('id', unitId)
       .maybeSingle();
     const ownerId = (unit as any)?.property?.landlord_id;
@@ -138,26 +137,27 @@ export async function addTenant(formData: FormData): Promise<Result> {
 
     void syncContact({ email, name: fullName, phone, role: 'tenant', tags: ['tenant'] });
 
-    // TODO: Employment Verification trigger
-    // Once employer contact fields are added to AddTenantForm
-    // (employer_email, employer_name, employer_contact_name inputs), wire up here:
-    //
-    // const employerEmail = String(formData.get('employer_email') || '').trim();
-    // const propertyId = (unit as any)?.property?.id as string | undefined;
-    // if (employerEmail && propertyId) {
-    //   void sendEmploymentVerification({
-    //     tenantId,
-    //     landlordId: me.id,
-    //     propertyId,
-    //     employerEmail,
-    //     employerName: String(formData.get('employer_name') || '').trim() || null,
-    //     employerContactName: String(formData.get('employer_contact_name') || '').trim() || null,
-    //   });
-    // }
+    // ── Optional employment verification ────────────────────────────────────────
+    const employerEmail = String(formData.get('employer_email') || '').trim();
+    let verificationSent = false;
+    if (employerEmail && tenantId) {
+      const evResult = await sendEmploymentVerification({
+        tenantId,
+        landlordId: me.id,
+        propertyId: (unit as any).property_id as string,
+        employerEmail,
+        employerName: String(formData.get('employer_name') || '').trim() || null,
+        employerContactName: String(formData.get('employer_contact_name') || '').trim() || null,
+      });
+      verificationSent = evResult.ok;
+      if (!evResult.ok) {
+        console.warn('[addTenant] employment verification failed:', evResult.error);
+      }
+    }
 
     revalidatePath('/landlord/tenants');
     revalidatePath('/landlord/properties');
-    return { ok: true };
+    return { ok: true, tenantId, verificationSent };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }

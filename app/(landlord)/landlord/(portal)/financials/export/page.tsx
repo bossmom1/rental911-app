@@ -1,34 +1,30 @@
+import { cookies } from 'next/headers';
+import { createSupabaseServerClient } from '@/lib/supabase';
+import { getCurrentUser } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PortalShell';
-import { Card } from '@/components/ui/Card';
-import { Field, Input } from '@/components/ui/Field';
-import { Button } from '@/components/ui/Button';
+import { ExportForm } from './ExportForm';
 
 export const dynamic = 'force-dynamic';
 
-export default function LandlordTaxExport() {
-  const now = new Date();
-  const defaultStart = `${now.getUTCFullYear()}-01-01`;
-  const defaultEnd = `${now.getUTCFullYear()}-12-31`;
+export default async function LandlordExportPage({
+  searchParams,
+}: {
+  searchParams: { year?: string };
+}) {
+  const current = await getCurrentUser();
+  const meId = current!.authId;
+  const year = Number(searchParams.year || new Date().getFullYear());
 
   return (
     <>
-      <PageHeader title="Tax Export" subtitle="Year-end rent payment export for your records." />
-      <Card>
-        <form action="/api/financials/tax-export" method="GET" className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Start date" htmlFor="start">
-              <Input id="start" name="start" type="date" defaultValue={defaultStart} />
-            </Field>
-            <Field label="End date" htmlFor="end">
-              <Input id="end" name="end" type="date" defaultValue={defaultEnd} />
-            </Field>
-          </div>
-          <Button type="submit">Download CSV</Button>
-          <p className="text-ink/60">
-            For use with Schedule E or your accountant — consult a tax professional.
-          </p>
-        </form>
-      </Card>
+      <PageHeader
+        title="Year-End Tax Export"
+        subtitle="Download a CSV of all rent payments for your records or accountant."
+      />
+      <ExportForm landlordId={meId} defaultYear={year} />
+      <p className="mt-4 text-xs text-ink/50 max-w-lg">
+        For use with Schedule E or your accountant — consult a tax professional regarding your specific reporting requirements.
+      </p>
     </>
   );
 }

@@ -78,7 +78,7 @@ export default async function LandlordMaintenance() {
                       View
                     </Link>
                     <form action={approveMaintenanceAction.bind(null, req.id)}>
-                      <Button type="submit" size="sm">
+                      <Button type="submit" className="text-sm py-1 px-3">
                         Approve
                       </Button>
                     </form>

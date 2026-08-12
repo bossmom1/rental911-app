@@ -3,183 +3,183 @@ import { cookies } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase';
 import { PageHeader } from '@/components/ui/PortalShell';
 import { DataTable, EmptyState } from '@/components/ui/EmptyState';
-import { ComplianceStatusBadge } from '@/components/ui/ComplianceStatusBadge';
-import { SelfLicensedMunicipalityBadge } from '@/components/ui/SelfLicensedMunicipalityBadge';
-import { StatCard } from '@/components/ui/StatCard';
-import { Field, Select } from '@/components/ui/Field';
-import { Button } from '@/components/ui/Button';
-import { fmtDate } from '@/lib/format';
-import { isPgSelfLicensedMunicipality, SUPPORTED_COUNTIES } from '@/lib/compliance';
-import type { ComplianceStatus } from '@/types/database';
+import { complianceTypeLabel, complianceStatusClass, complianceStatusLabel } from '@/lib/compliance';
 
 export const dynamic = 'force-dynamic';
 
-interface ComplianceItemRow {
-  type: string;
-  status: ComplianceStatus | null;
-  expiry_date: string | null;
-  updated_at: string | null;
-}
-
-interface PropertyRow {
-  id: string;
-  name: string | null;
-  county: string | null;
-  municipality: string | null;
-  compliance_items: ComplianceItemRow[];
-}
-
-const STATUS_OPTIONS: ComplianceStatus[] = [
-  'current',
-  'expiring_soon',
-  'expired',
-  'not_on_file',
-  'not_applicable',
-];
-
-function findItem(items: ComplianceItemRow[], types: string[]): ComplianceItemRow | undefined {
-  return items.find((i) => types.includes(i.type));
-}
-
-function lastUpdated(items: ComplianceItemRow[]): string | null {
-  const dates = items.map((i) => i.updated_at).filter(Boolean) as string[];
-  if (!dates.length) return null;
-  return dates.reduce((latest, d) => (d > latest ? d : latest));
-}
-
-export default async function AdminCompliance({
+export default async function AdminCompliancePage({
   searchParams,
 }: {
   searchParams: { county?: string; status?: string };
 }) {
   const supabase = createSupabaseServerClient(cookies());
-  const countyFilter = searchParams.county || '';
-  const statusFilter = searchParams.status || '';
 
-  const { data } = await supabase
-    .from('properties')
-    .select('id, name, county, municipality, compliance_items(type, status, expiry_date, updated_at)')
-    .order('name', { ascending: true });
+  // Fetch all compliance items with their property + landlord info
+  let query = supabase
+    .from('compliance_items')
+    .select(`
+      id, type, status, expiry_date, alert_sent, updated_at,
+      property:properties (
+        id, name, address, county,
+        landlord:users!properties_landlord_id_fkey (full_name, email)
+      )
+    `)
+    .order('expiry_date', { ascending: true, nullsFirst: false });
 
-  const allProperties = (data ?? []) as unknown as PropertyRow[];
-  const allItems = allProperties.flatMap((p) => p.compliance_items ?? []);
+  const { data: items } = await query;
+  const rows = items ?? [];
 
-  const expiring = allItems.filter((i) => i.status === 'expiring_soon').length;
-  const expired = allItems.filter((i) => i.status === 'expired').length;
-  const notOnFile = allItems.filter((i) => i.status === 'not_on_file').length;
-
-  const rows = allProperties.filter((p) => {
-    if (countyFilter && p.county !== countyFilter) return false;
-    if (statusFilter && !(p.compliance_items ?? []).some((i) => i.status === statusFilter)) {
-      return false;
-    }
+  // Filter in JS (simpler than chaining Supabase filters on nested relations)
+  const filtered = rows.filter((item) => {
+    const prop = item.property as any;
+    if (searchParams.county && prop?.county !== searchParams.county) return false;
+    if (searchParams.status && item.status !== searchParams.status) return false;
     return true;
   });
+
+  // Count expiring within 30 days for the stat card
+  const today = new Date();
+  const in30 = new Date(today);
+  in30.setDate(today.getDate() + 30);
+  const expiringCount = rows.filter((r) => {
+    if (!r.expiry_date) return false;
+    const d = new Date(r.expiry_date);
+    return d >= today && d <= in30;
+  }).length;
+
+  // Unique counties for filter bar
+  const counties = Array.from(
+    new Set(
+      rows
+        .map((r) => (r.property as any)?.county)
+        .filter(Boolean)
+    )
+  ).sort();
+
+  const statusOptions = [
+    'current',
+    'expiring_soon',
+    'expired',
+    'not_on_file',
+    'not_applicable',
+  ];
 
   return (
     <>
       <PageHeader
-        title="Compliance"
-        subtitle="Maryland rental license, lead paint, and inspection tracking."
+        title="Compliance Dashboard"
+        subtitle="All properties and their compliance item statuses."
       />
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard tone="red" label="Expiring Soon" value={expiring} sublabel="within 30 days" />
-        <StatCard tone="red" label="Expired" value={expired} />
-        <StatCard tone="gold" label="Not On File" value={notOnFile} />
-      </div>
+      {/* Expiring stat card */}
+      {expiringCount > 0 && (
+        <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 flex items-center gap-3">
+          <span className="text-red-600 font-bold text-lg">{expiringCount}</span>
+          <span className="text-red-700 font-medium">
+            compliance item{expiringCount !== 1 ? 's' : ''} expiring within 30 days
+          </span>
+        </div>
+      )}
 
-      <form method="GET" className="mb-6 flex flex-wrap items-end gap-4">
-        <div className="w-48">
-          <Field label="County" htmlFor="county">
-            <Select id="county" name="county" defaultValue={countyFilter}>
-              <option value="">All counties</option>
-              {SUPPORTED_COUNTIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        <div className="w-48">
-          <Field label="Status" htmlFor="status">
-            <Select id="status" name="status" defaultValue={statusFilter}>
-              <option value="">All statuses</option>
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s.replace(/_/g, ' ')}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        <Button type="submit" variant="outline" className="mb-4">
+      {/* Filter bar */}
+      <form className="mb-4 flex flex-wrap gap-3 items-center" method="GET">
+        <select
+          name="county"
+          defaultValue={searchParams.county ?? ''}
+          className="rounded border border-gray-300 px-3 py-1.5 text-sm"
+        >
+          <option value="">All Counties</option>
+          {counties.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <select
+          name="status"
+          defaultValue={searchParams.status ?? ''}
+          className="rounded border border-gray-300 px-3 py-1.5 text-sm"
+        >
+          <option value="">All Statuses</option>
+          {statusOptions.map((s) => (
+            <option key={s} value={s}>
+              {complianceStatusLabel(s)}
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          className="rounded bg-navy px-4 py-1.5 text-sm font-bold text-white"
+        >
           Filter
-        </Button>
-        {(countyFilter || statusFilter) && (
-          <Link href="/admin/compliance" className="mb-4 text-navy underline">
-            Clear filters
+        </button>
+        {(searchParams.county || searchParams.status) && (
+          <Link href="/admin/compliance" className="text-sm text-navy underline">
+            Clear
           </Link>
         )}
       </form>
 
-      {rows.length === 0 ? (
+      {filtered.length === 0 ? (
         <EmptyState
-          title="No properties match these filters"
-          message="Compliance items are created automatically when a property is added."
+          title="No compliance items found"
+          message="Items are auto-created when properties are added. Add a property to get started."
         />
       ) : (
         <DataTable
           columns={[
             'Property',
             'County',
-            'Rental License',
-            'Lead Paint Cert',
-            'Inspection Cert',
-            'Last Updated',
+            'Landlord',
+            'Item',
+            'Status',
+            'Expires',
+            'Alert Sent',
           ]}
         >
-          {rows.map((p) => {
-            const items = p.compliance_items ?? [];
-            const rentalLicense = findItem(items, [
-              'rental_license',
-              'dpie_rental_license',
-              'municipal_rental_license',
-              'town_rental_license',
-            ]);
-            const leadPaint = findItem(items, ['lead_paint_cert']);
-            const inspection = findItem(items, ['inspection_cert']);
+          {filtered.map((item) => {
+            const prop = item.property as any;
+            const landlord = prop?.landlord as any;
             return (
-              <tr key={p.id}>
-                <td className="px-4 py-3 font-display font-bold text-navy">
-                  <Link href={`/admin/compliance/${p.id}`} className="hover:underline">
-                    {p.name ?? '—'}
+              <tr key={item.id}>
+                <td className="px-4 py-3">
+                  <Link
+                    href={`/admin/compliance/${prop?.id}`}
+                    className="font-display font-bold text-navy underline"
+                  >
+                    {prop?.name || prop?.address || '—'}
                   </Link>
+                  <p className="text-xs text-ink/60">{prop?.address}</p>
                 </td>
+                <td className="px-4 py-3 text-sm">{prop?.county || '—'}</td>
+                <td className="px-4 py-3 text-sm">
+                  <p>{landlord?.full_name || '—'}</p>
+                  <p className="text-xs text-ink/60">{landlord?.email}</p>
+                </td>
+                <td className="px-4 py-3 text-sm">{complianceTypeLabel(item.type ?? '')}</td>
                 <td className="px-4 py-3">
-                  <div className="flex flex-col items-start gap-1">
-                    <span>{p.county ?? '—'}</span>
-                    {isPgSelfLicensedMunicipality(p.county, p.municipality) && (
-                      <SelfLicensedMunicipalityBadge />
-                    )}
-                  </div>
+                  <span
+                    className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${complianceStatusClass(item.status ?? '')}`}
+                  >
+                    {complianceStatusLabel(item.status ?? '')}
+                  </span>
                 </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-col gap-1">
-                    <ComplianceStatusBadge value={rentalLicense?.status} />
-                    {rentalLicense?.expiry_date && (
-                      <span className="text-ink/60">{fmtDate(rentalLicense.expiry_date)}</span>
-                    )}
-                  </div>
+                <td className="px-4 py-3 text-sm">
+                  {item.expiry_date
+                    ? new Date(item.expiry_date).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })
+                    : '—'}
                 </td>
-                <td className="px-4 py-3">
-                  <ComplianceStatusBadge value={leadPaint?.status} />
+                <td className="px-4 py-3 text-sm">
+                  {item.alert_sent ? (
+                    <span className="text-green-700">✓ Yes</span>
+                  ) : (
+                    <span className="text-ink/50">No</span>
+                  )}
                 </td>
-                <td className="px-4 py-3">
-                  <ComplianceStatusBadge value={inspection?.status} />
-                </td>
-                <td className="px-4 py-3 text-ink/70">{fmtDate(lastUpdated(items))}</td>
               </tr>
             );
           })}

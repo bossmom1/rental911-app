@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Field, Input, Select } from '@/components/ui/Field';
 import { addProperty, addUnit, addTenant } from '@/app/(landlord)/landlord/(portal)/actions';
 
-const MD_COUNTIES = ['Charles', "St. Mary's", 'Prince George’s', 'Calvert', 'Anne Arundel', 'Other'];
+const MD_COUNTIES = ['Charles', "St. Mary's", 'Prince George's', 'Calvert', 'Anne Arundel', 'Other'];
 
 function useAction() {
   const router = useRouter();
@@ -143,20 +143,43 @@ export function AddTenantForm({
 }: {
   units: Array<{ id: string; label: string }>;
 }) {
-  const { error, open, setOpen, pending, submit } = useAction();
-  if (!open) {
-    return (
-      <Button variant="gold" onClick={() => setOpen(true)} >
-        + Add tenant
-      </Button>
-    );
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [showEv, setShowEv] = useState(false);
+
+  function submit(fd: FormData) {
+    setError(null);
+    setVerificationSent(false);
+    startTransition(async () => {
+      const res = await addTenant(fd);
+      if (!res.ok) {
+        setError(res.error || 'Something went wrong.');
+        return;
+      }
+      if (res.verificationSent) setVerificationSent(true);
+      setOpen(false);
+      router.refresh();
+    });
   }
+
+  if (!open) {
+    return <Button variant="gold" onClick={() => setOpen(true)}>+ Add tenant</Button>;
+  }
+
   return (
     <form
-      action={(fd) => submit(() => addTenant(fd))}
+      action={submit}
       className="rounded-xl border border-light-blue bg-white p-6"
     >
       <ErrorNote error={error} />
+      {verificationSent && (
+        <p className="mb-3 rounded-lg bg-green-50 px-3 py-2 text-green-700">
+          Tenant added — employment verification email sent to employer.
+        </p>
+      )}
       {units.length === 0 ? (
         <p className="mb-3 text-ink">
           Add a property and unit first, then you can assign a tenant.
@@ -179,9 +202,45 @@ export function AddTenantForm({
           <Field label="Phone" htmlFor="t_phone">
             <Input id="t_phone" name="phone" type="tel" />
           </Field>
+
+          {/* ── Employment Verification (optional) ─────────────────────────── */}
+          <div className="mt-4 border-t border-light-blue pt-4">
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={showEv}
+                onChange={(e) => setShowEv(e.target.checked)}
+              />
+              <span className="font-display font-bold text-navy text-sm">
+                Send employment verification to employer
+              </span>
+            </label>
+            {showEv && (
+              <div className="mt-3 grid grid-cols-1 gap-x-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <Field label="Employer email" htmlFor="t_emp_email">
+                    <Input
+                      id="t_emp_email"
+                      name="employer_email"
+                      type="email"
+                      required={showEv}
+                      placeholder="hr@company.com"
+                    />
+                  </Field>
+                </div>
+                <Field label="Employer / company name" htmlFor="t_emp_name">
+                  <Input id="t_emp_name" name="employer_name" placeholder="Acme Corp" />
+                </Field>
+                <Field label="HR contact name" htmlFor="t_emp_contact">
+                  <Input id="t_emp_contact" name="employer_contact_name" placeholder="Jane Smith" />
+                </Field>
+              </div>
+            )}
+          </div>
         </>
       )}
-      <div className="flex gap-2">
+      <div className="mt-4 flex gap-2">
         <Button type="submit" disabled={pending || units.length === 0}>
           {pending ? 'Adding…' : 'Add tenant'}
         </Button>

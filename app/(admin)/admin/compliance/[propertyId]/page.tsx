@@ -1,113 +1,73 @@
-import Link from 'next/link';
-import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { createSupabaseServerClient } from '@/lib/supabase';
 import { PageHeader } from '@/components/ui/PortalShell';
-import { Card } from '@/components/ui/Card';
-import { ComplianceStatusBadge } from '@/components/ui/ComplianceStatusBadge';
-import { SelfLicensedMunicipalityBadge } from '@/components/ui/SelfLicensedMunicipalityBadge';
-import { Field, Select, Input } from '@/components/ui/Field';
-import { Button } from '@/components/ui/Button';
-import { complianceItemLabel, isPgSelfLicensedMunicipality } from '@/lib/compliance';
-import { fmtDate } from '@/lib/format';
-import type { ComplianceStatus } from '@/types/database';
-import { updateComplianceItemAction } from './actions';
+import { DataTable } from '@/components/ui/EmptyState';
+import { complianceTypeLabel, complianceStatusClass, complianceStatusLabel } from '@/lib/compliance';
+import { UpdateComplianceItemForm } from './UpdateComplianceItemForm';
 
 export const dynamic = 'force-dynamic';
 
-const STATUS_OPTIONS: ComplianceStatus[] = [
-  'current',
-  'expiring_soon',
-  'expired',
-  'not_on_file',
-  'not_applicable',
-];
-
-export default async function AdminCompliancePropertyDetail({
+export default async function PropertyCompliancePage({
   params,
 }: {
   params: { propertyId: string };
 }) {
   const supabase = createSupabaseServerClient(cookies());
-  const { data: property } = await supabase
-    .from('properties')
-    .select('id, name, county, municipality, address')
-    .eq('id', params.propertyId)
-    .maybeSingle();
+
+  const [{ data: property }, { data: items }] = await Promise.all([
+    supabase
+      .from('properties')
+      .select('id, name, address, county, lead_paint_required')
+      .eq('id', params.propertyId)
+      .single(),
+    supabase
+      .from('compliance_items')
+      .select('*')
+      .eq('property_id', params.propertyId)
+      .order('type'),
+  ]);
 
   if (!property) notFound();
-
-  const { data: items } = await supabase
-    .from('compliance_items')
-    .select('*')
-    .eq('property_id', params.propertyId)
-    .order('type', { ascending: true });
-
-  const rows = items ?? [];
 
   return (
     <>
       <PageHeader
-        title={property.name ?? 'Property'}
-        subtitle={`${property.county ?? '—'} County${property.municipality ? ` — ${property.municipality}` : ''} — ${property.address ?? ''}`}
-        action={
-          <Link href="/admin/compliance" className="text-navy underline">
-            Back to Compliance
-          </Link>
-        }
+        title={property.name || property.address || 'Property Compliance'}
+        subtitle={`${property.address} · ${property.county} County`}
       />
 
-      {isPgSelfLicensedMunicipality(property.county, property.municipality) && (
-        <div className="mb-4">
-          <SelfLicensedMunicipalityBadge />
-        </div>
-      )}
-
-      <div className="space-y-4">
-        {rows.map((item) => (
-          <Card key={item.id}>
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="font-display text-lg font-bold text-navy">
-                {complianceItemLabel(item.type)}
-              </h3>
-              <ComplianceStatusBadge value={item.status} />
-            </div>
-            <form
-              action={updateComplianceItemAction.bind(null, params.propertyId, item.id)}
-              className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:items-end"
-            >
-              <Field label="Status" htmlFor={`status-${item.id}`}>
-                <Select id={`status-${item.id}`} name="status" defaultValue={item.status ?? ''}>
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replace(/_/g, ' ')}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Expiry Date" htmlFor={`expiry-${item.id}`}>
-                <Input
-                  id={`expiry-${item.id}`}
-                  name="expiry_date"
-                  type="date"
-                  defaultValue={item.expiry_date ?? ''}
-                />
-              </Field>
-              <Field label="Notes" htmlFor={`notes-${item.id}`}>
-                <Input id={`notes-${item.id}`} name="notes" defaultValue={item.notes ?? ''} />
-              </Field>
-              <div className="sm:col-span-3">
-                <Button type="submit" variant="outline">
-                  Save
-                </Button>
-                <span className="ml-3 text-ink/50">
-                  Last updated {fmtDate(item.updated_at)}
-                </span>
-              </div>
-            </form>
-          </Card>
+      <DataTable
+        columns={['Item', 'Status', 'Expires', 'Notes', 'Update']}
+      >
+        {(items ?? []).map((item) => (
+          <tr key={item.id}>
+            <td className="px-4 py-3 font-medium text-sm">
+              {complianceTypeLabel(item.type ?? '')}
+            </td>
+            <td className="px-4 py-3">
+              <span
+                className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${complianceStatusClass(item.status ?? '')}`}
+              >
+                {complianceStatusLabel(item.status ?? '')}
+              </span>
+            </td>
+            <td className="px-4 py-3 text-sm">
+              {item.expiry_date
+                ? new Date(item.expiry_date).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
+                : '—'}
+            </td>
+            <td className="px-4 py-3 text-sm text-ink/70">{item.notes || '—'}</td>
+            <td className="px-4 py-3">
+              <UpdateComplianceItemForm item={item} />
+            </td>
+          </tr>
         ))}
-      </div>
+      </DataTable>
     </>
   );
 }
