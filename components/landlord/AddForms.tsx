@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Field, Input, Select } from '@/components/ui/Field';
 import { addProperty, addUnit, addTenant } from '@/app/(landlord)/landlord/(portal)/actions';
 
-const MD_COUNTIES = ['Charles', "St. Mary's", 'Prince George's', 'Calvert', 'Anne Arundel', 'Other'];
+const MD_COUNTIES = ['Charles', "St. Mary's", "Prince George's", 'Calvert', 'Anne Arundel', 'Other'];
 
 function useAction() {
   const router = useRouter();
