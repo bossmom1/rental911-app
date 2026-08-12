@@ -47,7 +47,7 @@ async function notifyGhl(
     name: landlord.full_name,
     phone: landlord.phone,
     role: 'landlord',
-    tags: ['landlord', GHL_ONBOARDING_TAGS[tier] ?? tier],
+    tags: ['Rental911', 'landlord', GHL_ONBOARDING_TAGS[tier] ?? tier],
   });
   if (!ok || !contactId) return;
   await addContactTag(contactId, 'onboarding-fee-paid');
