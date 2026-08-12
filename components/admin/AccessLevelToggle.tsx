@@ -26,21 +26,24 @@ export function AccessLevelToggle({
     });
   }
 
+  const isFull = current === 'full';
+
   return (
     <button
+      role="switch"
+      aria-checked={isFull}
       onClick={toggle}
       disabled={pending}
-      className={`rounded-lg px-3 py-1.5 font-display font-bold ${
-        current === 'full'
-          ? 'bg-gold text-navy hover:opacity-90'
-          : 'bg-navy text-white hover:opacity-90'
-      } disabled:opacity-50`}
+      title={isFull ? 'Revoke to Limited' : 'Grant Full Access'}
+      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${
+        isFull ? 'bg-gold' : 'bg-navy/30'
+      }`}
     >
-      {pending
-        ? 'Saving…'
-        : current === 'full'
-          ? 'Revoke to Limited'
-          : 'Grant Full Access'}
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+          isFull ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
     </button>
   );
 }

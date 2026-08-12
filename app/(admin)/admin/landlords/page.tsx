@@ -38,7 +38,8 @@ export default async function AdminLandlords() {
             'Onboarding',
             'Onboarding Fee',
             'Subscription',
-            'Actions',
+            'Full Access',
+            'P&L',
           ]}
         >
           {rows.map((u) => {
@@ -71,18 +72,18 @@ export default async function AdminLandlords() {
                   <Badge value={u.subscription_status} />
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex flex-row flex-wrap items-center gap-2">
-                    <AccessLevelToggle
-                      userId={u.id}
-                      level={(u.access_level ?? 'limited') as AccessLevel}
-                    />
-                    <Link
-                      href={`/admin/landlords/${u.id}/financials/reports`}
-                      className="font-display font-bold text-navy underline whitespace-nowrap"
-                    >
-                      P&amp;L Reports
-                    </Link>
-                  </div>
+                  <AccessLevelToggle
+                    userId={u.id}
+                    level={(u.access_level ?? 'limited') as AccessLevel}
+                  />
+                </td>
+                <td className="px-4 py-3">
+                  <Link
+                    href={`/admin/landlords/${u.id}/financials/reports`}
+                    className="font-display font-bold text-navy underline whitespace-nowrap"
+                  >
+                    P&amp;L Reports
+                  </Link>
                 </td>
               </tr>
             );
