@@ -11,13 +11,27 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminLandlords() {
   const supabase = createSupabaseServerClient(cookies());
-  const { data: landlords } = await supabase
-    .from('users')
-    .select('*, properties(count), landlord_documents(type)')
-    .eq('role', 'landlord')
-    .order('created_at', { ascending: false });
+
+  const [{ data: landlords }, { data: submissions }] = await Promise.all([
+    supabase
+      .from('users')
+      .select('*, properties(count), landlord_documents(type)')
+      .eq('role', 'landlord')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('onboarding_submissions')
+      .select('landlord_email, status, submitted_at'),
+  ]);
 
   const rows = landlords ?? [];
+
+  // Map email (lowercase) → submission record
+  const submissionByEmail = new Map(
+    (submissions ?? []).map((s) => [
+      (s.landlord_email ?? '').toLowerCase(),
+      s,
+    ])
+  );
 
   return (
     <>
@@ -35,7 +49,7 @@ export default async function AdminLandlords() {
           columns={[
             'Landlord',
             'Properties',
-            'Onboarding',
+            'Survey',
             'Subscription',
             'Full Access',
             'Docs',
@@ -54,6 +68,10 @@ export default async function AdminLandlords() {
             const docCount = docTypes.length;
             const hasLease = docTypes.includes('lease');
 
+            const submission = submissionByEmail.get(
+              (u.email ?? '').toLowerCase()
+            );
+
             return (
               <tr key={u.id}>
                 <td className="px-4 py-3">
@@ -69,11 +87,15 @@ export default async function AdminLandlords() {
                 </td>
                 <td className="px-4 py-3">{propCount}</td>
                 <td className="px-4 py-3">
-                  {u.onboarding_complete ? (
-                    <Badge value="current" />
+                  {submission ? (
+                    <Link href="/admin/onboarding-submissions" className="inline-block">
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                        ✓ Submitted
+                      </span>
+                    </Link>
                   ) : (
-                    <span className="text-ink/70">
-                      Step {u.onboarding_step} / 8
+                    <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700">
+                      ⏳ Pending
                     </span>
                   )}
                 </td>
