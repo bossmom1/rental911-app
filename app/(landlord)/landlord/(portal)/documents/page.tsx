@@ -4,7 +4,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { PageHeader } from '@/components/ui/PortalShell';
 import { fmtDate } from '@/lib/format';
 import { DocumentUpload } from '@/components/landlord/DocumentUpload';
-import { deleteDocument } from './actions';
+import { archiveDocument } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,13 +38,17 @@ export default async function LandlordDocumentsPage() {
       .eq('owner_id', landlordId),
   ]);
 
-  const documents = docs ?? [];
-  const typesOnFile = new Set(documents.map((d) => d.type));
+  const allDocs = docs ?? [];
+  const activeDocs = allDocs.filter((d) => !d.archived);
+  const archivedDocs = allDocs.filter((d) => d.archived);
+
+  // Checklist only counts active docs
+  const typesOnFile = new Set(activeDocs.map((d) => d.type));
   const missingRequired = REQUIRED_TYPES.filter((t) => !typesOnFile.has(t));
 
-  // Generate signed URLs for viewing
-  const docsWithUrls = await Promise.all(
-    documents.map(async (doc) => {
+  // Generate signed URLs for active docs only
+  const activeWithUrls = await Promise.all(
+    activeDocs.map(async (doc) => {
       const { data } = await supabase.storage
         .from('landlord-documents')
         .createSignedUrl(doc.file_path, 3600);
@@ -101,8 +105,8 @@ export default async function LandlordDocumentsPage() {
         />
       </div>
 
-      {/* Document list */}
-      {docsWithUrls.length > 0 && (
+      {/* Active documents */}
+      {activeWithUrls.length > 0 && (
         <div className="overflow-hidden rounded-xl border border-gray-200">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left text-ink/70">
@@ -115,7 +119,7 @@ export default async function LandlordDocumentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {docsWithUrls.map((doc) => (
+              {activeWithUrls.map((doc) => (
                 <tr key={doc.id}>
                   <td className="px-4 py-3 font-display font-bold text-navy">
                     {doc.label ?? doc.file_name}
@@ -142,14 +146,14 @@ export default async function LandlordDocumentsPage() {
                       <form
                         action={async () => {
                           'use server';
-                          await deleteDocument(doc.id, landlordId);
+                          await archiveDocument(doc.id, landlordId);
                         }}
                       >
                         <button
                           type="submit"
-                          className="text-red-600 underline text-xs"
+                          className="text-ink/40 underline text-xs hover:text-ink/70"
                         >
-                          Remove
+                          Archive
                         </button>
                       </form>
                     </div>
@@ -161,8 +165,37 @@ export default async function LandlordDocumentsPage() {
         </div>
       )}
 
-      {docsWithUrls.length === 0 && (
+      {activeWithUrls.length === 0 && (
         <p className="text-ink/60 text-sm">No documents uploaded yet.</p>
+      )}
+
+      {/* Archived documents — collapsed section */}
+      {archivedDocs.length > 0 && (
+        <details className="mt-8">
+          <summary className="cursor-pointer text-xs text-ink/40 hover:text-ink/60">
+            Archived documents ({archivedDocs.length})
+          </summary>
+          <div className="mt-3 overflow-hidden rounded-xl border border-gray-100">
+            <table className="w-full text-sm text-ink/50">
+              <thead className="bg-gray-50 text-left text-ink/40">
+                <tr>
+                  <th className="px-4 py-2 font-display font-bold">Document</th>
+                  <th className="px-4 py-2 font-display font-bold">Type</th>
+                  <th className="px-4 py-2 font-display font-bold">Uploaded</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {archivedDocs.map((doc) => (
+                  <tr key={doc.id} className="opacity-60">
+                    <td className="px-4 py-2 line-through">{doc.label ?? doc.file_name}</td>
+                    <td className="px-4 py-2">{DOC_TYPE_LABELS[doc.type] ?? doc.type}</td>
+                    <td className="px-4 py-2">{fmtDate(doc.uploaded_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
       )}
     </>
   );

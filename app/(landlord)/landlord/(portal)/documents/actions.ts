@@ -37,10 +37,28 @@ export async function saveDocumentMetadata(payload: {
   revalidatePath('/admin/landlords');
 }
 
-export async function deleteDocument(documentId: string, landlordId: string) {
+export async function archiveDocument(documentId: string, landlordId: string) {
+  const supabase = createSupabaseServerClient(cookies());
+  const user = await getCurrentUser();
+  if (!user) throw new Error('Not authenticated');
+
+  const { error } = await supabase
+    .from('landlord_documents')
+    .update({ archived: true })
+    .eq('id', documentId)
+    .eq('landlord_id', landlordId); // safety: can only archive own docs
+
+  if (error) throw new Error(error.message);
+
+  revalidatePath('/landlord/documents');
+  revalidatePath(`/admin/landlords/${landlordId}/documents`);
+  revalidatePath('/admin/landlords');
+}
+
+// Admin-only — hard delete from storage + DB
+export async function adminDeleteDocument(documentId: string, landlordId: string) {
   const supabase = createSupabaseServerClient(cookies());
 
-  // Get file path before deleting
   const { data: doc } = await supabase
     .from('landlord_documents')
     .select('file_path')

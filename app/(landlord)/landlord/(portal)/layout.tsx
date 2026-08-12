@@ -5,16 +5,17 @@ import { LimitedAccessBanner } from '@/components/landlord/LimitedAccessBanner';
 import type { NavItem } from '@/components/ui/SidebarNav';
 
 const NAV: NavItem[] = [
-  { label: 'Dashboard', href: '/landlord/dashboard' },
-  { label: 'Properties', href: '/landlord/properties' },
-  { label: 'Tenants', href: '/landlord/tenants' },
-  { label: 'Maintenance', href: '/landlord/maintenance' },
-  { label: 'Renewals', href: '/landlord/renewals' },
-  { label: 'Financials', href: '/landlord/financials' },
-  { label: 'P&L Reports', href: '/landlord/financials/reports' },
-  { label: 'Tax Export', href: '/landlord/financials/export' },
-  { label: 'Verifications', href: '/landlord/verifications' },
-  { label: 'My Survey', href: '/landlord/survey' },
+  { label: 'Dashboard',    href: '/landlord/dashboard' },
+  { label: 'Properties',   href: '/landlord/properties' },
+  { label: 'Tenants',      href: '/landlord/tenants' },
+  { label: 'Documents',    href: '/landlord/documents' },
+  { label: 'Maintenance',  href: '/landlord/maintenance' },
+  { label: 'Renewals',     href: '/landlord/renewals' },
+  { label: 'Financials',   href: '/landlord/financials' },
+  { label: 'P&L Reports',  href: '/landlord/financials/reports' },
+  { label: 'Tax Export',   href: '/landlord/financials/export' },
+  { label: 'Verifications',href: '/landlord/verifications' },
+  { label: 'My Survey',    href: '/landlord/survey' },
 ];
 
 export default async function LandlordPortalLayout({
