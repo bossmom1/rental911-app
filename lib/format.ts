@@ -34,7 +34,7 @@ export function fmtDate(value: string | null | undefined): string {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    ...(dateOnly ? { timeZone: 'UTC' } : {}),
+    ...(dateOnly ? { timeZone: 'UTC' } : { timeZone: 'America/New_York' }),
   });
 }
 
@@ -42,7 +42,10 @@ export function fmtDateTime(value: string | null | undefined): string {
   if (!value) return '—';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '—';
+  // Always display in Eastern time — Vercel runs UTC, so without an explicit
+  // timeZone all timestamps render ~4–5 hours ahead of what the user expects.
   return d.toLocaleString('en-US', {
+    timeZone: 'America/New_York',
     year: 'numeric',
     month: 'short',
     day: 'numeric',
