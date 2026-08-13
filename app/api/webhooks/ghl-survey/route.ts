@@ -118,6 +118,10 @@ export async function POST(request: NextRequest) {
         security_deposit_amount: field(formData, 'What is the total security deposit amount', 'security_deposit', 'security_deposit_amount'),
         no_funds_initials:       field(formData, 'Please type your initials to acknowledge that Rental911 does not hold security deposits', 'no_funds_initials'),
 
+        // Preferred vendors (Slide 1)
+        preferred_vendors_yn:   field(formData, 'preferred_vendors_yn', 'Do you have preferred vendors'),
+        preferred_vendors_list: field(formData, 'preferred_vendors_list', 'If yes, please list each preferred vendor'),
+
         // Home warranty (Slide 2)
         has_existing_warranty:  field(formData, 'Do you currently have a home warranty in place', 'has_existing_warranty'),
         keep_own_warranty:      field(formData, 'Do you want to keep your current home warranty', 'keep_own_warranty'),

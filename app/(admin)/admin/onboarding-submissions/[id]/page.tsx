@@ -140,6 +140,11 @@ export default async function SubmissionDetail({
         <Row label="No-funds initials" value={s.no_funds_initials} />
       </Section>
 
+      <Section title="Preferred Vendors">
+        <Row label="Has preferred vendors" value={s.preferred_vendors_yn} />
+        <Row label="Vendor list" value={s.preferred_vendors_list} />
+      </Section>
+
       <Section title="Home Warranty">
         <Row label="Has existing warranty" value={s.has_existing_warranty} />
         <Row label="Keeping own warranty" value={s.keep_own_warranty} />
