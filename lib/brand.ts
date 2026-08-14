@@ -22,4 +22,8 @@ export const GHL_CRM_URL =
 export const AFC_HOME_CLUB_URL =
   process.env.NEXT_PUBLIC_AFC_HOME_CLUB_URL || 'https://afchomeclub.com/realtor/invoice';
 
+/** Meta Business Suite quick-access link — marketing hub for Rental911 Facebook/Instagram. */
+export const META_BUSINESS_SUITE_URL =
+  process.env.NEXT_PUBLIC_META_BUSINESS_SUITE_URL || 'https://business.facebook.com/latest/home';
+
 export type Brand = typeof brand;

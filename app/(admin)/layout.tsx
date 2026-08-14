@@ -2,6 +2,7 @@ import { requireRole } from '@/lib/auth';
 import { PortalShell } from '@/components/ui/PortalShell';
 import { GhlButton } from '@/components/ui/GhlButton';
 import { AfcButton } from '@/components/ui/AfcButton';
+import { MetaButton } from '@/components/ui/MetaButton';
 import type { NavItem } from '@/components/ui/SidebarNav';
 
 const NAV: NavItem[] = [
@@ -33,6 +34,7 @@ export default async function AdminLayout({
         <>
           <GhlButton />
           <AfcButton />
+          <MetaButton />
         </>
       }
     >
