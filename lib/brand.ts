@@ -26,4 +26,8 @@ export const AFC_HOME_CLUB_URL =
 export const META_BUSINESS_SUITE_URL =
   process.env.NEXT_PUBLIC_META_BUSINESS_SUITE_URL || 'https://business.facebook.com/latest/home';
 
+/** Google Business Profile manager — post to GMB, respond to reviews, edit profile. */
+export const GOOGLE_BUSINESS_PROFILE_URL =
+  process.env.NEXT_PUBLIC_GOOGLE_BUSINESS_PROFILE_URL || 'https://business.google.com';
+
 export type Brand = typeof brand;

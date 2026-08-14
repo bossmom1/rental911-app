@@ -2,7 +2,7 @@ import { requireRole } from '@/lib/auth';
 import { PortalShell } from '@/components/ui/PortalShell';
 import { GhlButton } from '@/components/ui/GhlButton';
 import { AfcButton } from '@/components/ui/AfcButton';
-import { MetaButton } from '@/components/ui/MetaButton';
+import { META_BUSINESS_SUITE_URL, GOOGLE_BUSINESS_PROFILE_URL } from '@/lib/brand';
 import type { NavItem } from '@/components/ui/SidebarNav';
 
 const NAV: NavItem[] = [
@@ -17,6 +17,13 @@ const NAV: NavItem[] = [
   { label: 'AFC Claims', href: '/admin/afc-claims' },
   { label: 'Financials', href: '/admin/financials' },
   { label: 'Documents', href: '/admin/documents' },
+  {
+    label: 'Marketing',
+    children: [
+      { label: 'Meta Business Suite', href: META_BUSINESS_SUITE_URL },
+      { label: 'Google Business Profile', href: GOOGLE_BUSINESS_PROFILE_URL },
+    ],
+  },
 ];
 
 export default async function AdminLayout({
@@ -34,7 +41,6 @@ export default async function AdminLayout({
         <>
           <GhlButton />
           <AfcButton />
-          <MetaButton />
         </>
       }
     >
