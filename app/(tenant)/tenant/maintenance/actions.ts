@@ -8,7 +8,7 @@ import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/sup
 import { getCurrentUser } from '@/lib/auth';
 import { notifyVendorOfDispatch } from '@/lib/dispatch';
 import { submitClaimInvoice } from '@/lib/afc';
-import { sendMaintenanceApprovalEmail } from '@/lib/email';
+import { sendMaintenanceApprovalEmail, sendEmergencyMaintenanceAlertEmail } from '@/lib/email';
 
 /**
  * Tenant creates a maintenance request. A chat thread is opened automatically:
@@ -84,6 +84,58 @@ export async function createRequest(formData: FormData): Promise<{ ok: boolean; 
 
   if (error || !request) {
     return { ok: false, error: error?.message || 'Could not create request.' };
+  }
+
+  // Emergency priority: alert every admin immediately, independent of the
+  // cost-threshold approval flow below (that one only fires on estimated
+  // cost, not urgency, and a request can otherwise sit unseen until someone
+  // checks the dashboard). Non-blocking — never delays the tenant's redirect.
+  if (priority === 'emergency') {
+    waitUntil(
+      (async () => {
+        try {
+          const { data: admins } = await supabase
+            .from('users')
+            .select('email')
+            .eq('role', 'admin');
+          const adminEmails = (admins ?? []).map((a) => a.email).filter(Boolean) as string[];
+          if (!adminEmails.length) {
+            console.warn('[maintenance] no admin users with email on file — skipping emergency alert');
+            return;
+          }
+
+          const { data: unit } = await supabase
+            .from('units')
+            .select('unit_number, property:properties(address, name)')
+            .eq('id', lease.unit_id!)
+            .maybeSingle();
+          const propertyAddress =
+            [(unit as any)?.property?.address ?? (unit as any)?.property?.name, unit?.unit_number ? `Unit ${unit.unit_number}` : null]
+              .filter(Boolean)
+              .join(', ') || 'address on file';
+
+          const { data: tenantUser } = await supabase
+            .from('users')
+            .select('full_name, phone, email')
+            .eq('id', current.authId)
+            .maybeSingle();
+
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://rental911.net';
+
+          await sendEmergencyMaintenanceAlertEmail({
+            to: adminEmails,
+            propertyAddress,
+            requestTitle: title,
+            description,
+            tenantName: tenantUser?.full_name ?? 'Tenant',
+            tenantContact: tenantUser?.phone || tenantUser?.email || 'contact on file',
+            requestUrl: `${appUrl}/admin/maintenance/${request.id}`,
+          });
+        } catch (alertErr) {
+          console.error('[maintenance] emergency alert failed (non-blocking):', alertErr);
+        }
+      })()
+    );
   }
 
   // Send approval email when request is above threshold (non-blocking).

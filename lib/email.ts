@@ -272,6 +272,58 @@ export async function sendMaintenanceApprovalEmail(
   }
 }
 
+export interface EmergencyMaintenanceAlertEmailInput {
+  to: string[];
+  propertyAddress: string;
+  requestTitle: string;
+  description: string;
+  tenantName: string;
+  tenantContact: string;
+  requestUrl: string;
+}
+
+/**
+ * Sent to every admin user immediately on request creation when priority is
+ * 'emergency' — independent of the maintenance-threshold approval flow above,
+ * which only fires on estimated cost. This is the push side: the admin
+ * dashboard is pull (you have to check it), so without this an emergency
+ * request can sit unseen until someone opens the Maintenance tab.
+ */
+export async function sendEmergencyMaintenanceAlertEmail(
+  input: EmergencyMaintenanceAlertEmailInput
+): Promise<boolean> {
+  const resend = getResend();
+  if (!resend) {
+    console.warn('[email] RESEND_API_KEY not set — skipping emergency maintenance alert email');
+    return false;
+  }
+  try {
+    const { error } = await resend.emails.send({
+      from: ALERTS_FROM_EMAIL,
+      to: input.to,
+      subject: `🚨 EMERGENCY maintenance request — ${input.propertyAddress}`,
+      html: `
+        <p style="color:#B91C1C;font-weight:bold;">A tenant just submitted an EMERGENCY-priority maintenance request.</p>
+        <p><strong>Property:</strong> ${input.propertyAddress}</p>
+        <p><strong>Request:</strong> ${input.requestTitle}</p>
+        <p><strong>Details:</strong> ${input.description || 'No description provided.'}</p>
+        <p><strong>Tenant:</strong> ${input.tenantName} — ${input.tenantContact}</p>
+        <p>
+          <a href="${input.requestUrl}" style="background:#B91C1C;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;font-family:sans-serif;">
+            View &amp; Dispatch Now
+          </a>
+        </p>
+        <p>— Rental911</p>
+      `,
+    });
+    if (error) throw new Error(error.message);
+    return true;
+  } catch (err) {
+    console.error('[email] sendEmergencyMaintenanceAlertEmail failed (non-blocking):', err);
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Employment Verification emails
 // ---------------------------------------------------------------------------
