@@ -2,7 +2,15 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createSupabaseAdminClient } from '@/lib/supabase';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy init — constructing Resend eagerly at module load crashes Next.js's
+// build-time "Collecting page data" step in any environment where
+// RESEND_API_KEY isn't present at build time (Resend's constructor throws
+// synchronously on a missing/empty key).
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 const FROM_EMAIL = 'Rental911 <noreply@rental911.net>';
 
 export async function POST(
@@ -94,7 +102,7 @@ export async function POST(
           `<li><strong>${r.signer_name}</strong> (${r.signer_email})</li>`)
         .join('');
 
-      await resend.emails.send({
+      await getResend().emails.send({
         from: FROM_EMAIL,
         to:   'ppgdropbox@gmail.com',
         subject: `✅ All Signed: "${record.document_title}" — ${totalCount}/${totalCount} complete`,
@@ -120,7 +128,7 @@ export async function POST(
           .createSignedUrl(rowSignedPath, 60 * 60 * 24 * 7);
         if (!rowUrl?.signedUrl) continue;
 
-        await resend.emails.send({
+        await getResend().emails.send({
           from: FROM_EMAIL,
           to:   row.signer_email as string,
           subject: `Your signed copy — ${record.document_title}`,
@@ -139,7 +147,7 @@ export async function POST(
       }
     } else {
       // Some still pending — send progress notification to Christine only
-      await resend.emails.send({
+      await getResend().emails.send({
         from: FROM_EMAIL,
         to:   'ppgdropbox@gmail.com',
         subject: `📝 ${signedCount}/${totalCount} Signed: "${record.document_title}" — ${record.signer_name}`,
@@ -161,7 +169,7 @@ export async function POST(
   } else {
     // ── Single-recipient (legacy / solo send) ────────────────────────────
     // Email Christine
-    await resend.emails.send({
+    await getResend().emails.send({
       from: FROM_EMAIL,
       to:   'ppgdropbox@gmail.com',
       subject: `✅ Signed: "${record.document_title}" — ${record.signer_name}`,
@@ -178,7 +186,7 @@ export async function POST(
 
     // Email the signer their copy
     if (pdfUrl) {
-      await resend.emails.send({
+      await getResend().emails.send({
         from: FROM_EMAIL,
         to:   record.signer_email,
         subject: `Your signed copy — ${record.document_title}`,
