@@ -99,11 +99,17 @@ export async function activateMembershipSubscriptionAction(
   customerId: string,
   paymentMethodId: string
 ): Promise<ActionResult<{ status: string; requiresAction: boolean; clientSecret: string | null }>> {
-  const result = await activateMembershipSubscription(customerId, paymentId, paymentMethodId);
+  const admin = createSupabaseAdminClient();
+  const { data: paymentRow } = await admin
+    .from('landlord_onboarding_payments')
+    .select('contact_email')
+    .eq('id', paymentId)
+    .single();
+
+  const result = await activateMembershipSubscription(customerId, paymentId, paymentMethodId, paymentRow?.contact_email ?? null);
   if (!result.ok) return { ok: false, error: result.error };
 
   if (result.subscriptionId) {
-    const admin = createSupabaseAdminClient();
     await admin
       .from('landlord_onboarding_payments')
       .update({ stripe_subscription_id: result.subscriptionId })

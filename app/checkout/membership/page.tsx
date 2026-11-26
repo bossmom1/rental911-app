@@ -136,6 +136,13 @@ function MembershipCheckout() {
               </div>
             </div>
 
+            <div className="mc-includes">
+              <div className="mc-inc-title">What Your $295 Setup Fee Covers</div>
+              <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Existing Lease Review — your current lease checked against the 2026 Maryland Tenant Bill of Rights, Fair Housing, and your county&#39;s addenda</span></div>
+              <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Member File &amp; Platform Setup — your account built and ready day one</span></div>
+              <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Compliance Document Library — delivered day one</span></div>
+            </div>
+
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 9, padding: '12px 16px', marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#1D4ED8', marginBottom: 3 }}>Need fuller-service placement + ongoing support instead?</div>
