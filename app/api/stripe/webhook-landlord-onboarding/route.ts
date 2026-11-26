@@ -36,6 +36,7 @@ const GHL_ONBOARDING_TAGS: Record<string, string> = {
   standard: 'Standard Landlord Rescue',
   placement_only: 'Placement Only',
   portfolio: 'Portfolio Investor',
+  membership: 'DIY Membership',
 };
 
 async function notifyGhl(
@@ -221,7 +222,13 @@ async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
 
   // ── Auto-send agreement for signing (best-effort) ─────────────────────────
   // Contact info comes from the payment row (no user account required at this stage).
-  if (updated.contact_email && updated.contact_name) {
+  // 'membership' is deliberately excluded: lib/agreements/agreement-pdf.tsx's
+  // renderAgreementPdf() has no 'membership' case in its switch and falls
+  // through to `default: StandardAgreement` — sending that would hand a
+  // $95/mo DIY member the $595 + $185/mo Landlord Rescue contract. Skip
+  // agreement-sending for this tier entirely until a dedicated Membership
+  // agreement template exists.
+  if (updated.tier !== 'membership' && updated.contact_email && updated.contact_name) {
     try {
       const result = await sendAgreement({
         tier: updated.tier,
