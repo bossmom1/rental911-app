@@ -9,7 +9,7 @@
  * silently fall through) that older, unrelated switch logic.
  */
 
-export const MEMBERSHIP_SETUP_FEE_CENTS = 29700; // $297 one-time, non-refundable
+export const MEMBERSHIP_SETUP_FEE_CENTS = 29500; // $295 one-time, non-refundable
 export const MEMBERSHIP_MONTHLY_CENTS = 9500; // $95/mo
 export const MEMBERSHIP_PRODUCT_NAME = 'Rental911 DIY Landlord Membership';
 export const MEMBERSHIP_SETUP_FEE_NAME = 'Rental911 DIY Landlord Membership — Setup Fee (non-refundable)';

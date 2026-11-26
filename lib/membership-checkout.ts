@@ -17,7 +17,7 @@ import {
  * subscription immediately (no 30-day-trial deferral toggle; the product is
  * month-to-month from day one).
  *
- * Two Stripe objects, same reasoning as the onboarding flow: the $297 setup
+ * Two Stripe objects, same reasoning as the onboarding flow: the $295 setup
  * fee is a directly-confirmed PaymentIntent; the $95/mo is a separate real
  * Stripe Subscription. The DB write that marks the payment row 'paid' happens
  * in the webhook (`payment_intent.succeeded`), not here.

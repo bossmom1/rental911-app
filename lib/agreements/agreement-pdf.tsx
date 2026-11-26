@@ -947,7 +947,7 @@ function MembershipAgreement({ clientName, date, christineSignatureBase64 }:
             landlord. Member remains the acting landlord of record and makes all final decisions.
           </Body>
           <Body>
-            Member agrees to pay a one-time setup fee of $297, due at enrollment and non-refundable,
+            Member agrees to pay a one-time setup fee of $295, due at enrollment and non-refundable,
             plus a recurring membership fee of $95 per month, billed monthly starting at enrollment
             via the payment method on file. Membership is month-to-month — Member may cancel anytime,
             with no minimum term and no cancellation fee. If a monthly charge is declined, membership
@@ -980,7 +980,7 @@ function MembershipAgreement({ clientName, date, christineSignatureBase64 }:
           <Text style={S.sectionHeader}>SECTION 5 — TERM, RENEWAL &amp; CANCELLATION</Text>
           <Body>
             This Agreement commences on the Effective Date and continues month-to-month. Either party
-            may cancel at any time, with no notice period and no cancellation fee. The $297 setup fee
+            may cancel at any time, with no notice period and no cancellation fee. The $295 setup fee
             is non-refundable regardless of when Member cancels.
           </Body>
 

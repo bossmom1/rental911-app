@@ -23,7 +23,7 @@ function validateContact(contact: MembershipContactInput): string | null {
 
 /**
  * Step 1 — inserts the ledger row (tier='membership', landlord_id null until
- * post-payment account linking) and charges the $297 setup fee. Reuses
+ * post-payment account linking) and charges the $295 setup fee. Reuses
  * landlord_onboarding_payments (see migration 0027) rather than a new table —
  * total_units stays 1, billing_option/portfolio_service_model stay null,
  * exactly like placement_only rows already leave columns unused.
@@ -93,7 +93,7 @@ export async function submitMembershipCheckout(
   };
 }
 
-/** Step 2 — called after the $297 setup-fee charge is fully resolved. */
+/** Step 2 — called after the $295 setup-fee charge is fully resolved. */
 export async function activateMembershipSubscriptionAction(
   paymentId: string,
   customerId: string,
