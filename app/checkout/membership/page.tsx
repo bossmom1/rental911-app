@@ -139,7 +139,7 @@ function MembershipCheckout() {
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 9, padding: '12px 16px', marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#1D4ED8', marginBottom: 3 }}>Need fuller-service placement + ongoing support instead?</div>
-                <div style={{ fontSize: 12, color: '#374151' }}>Landlord Rescue Subscription starts at <strong>$185/mo</strong> — includes placement, rent collection &amp; compliance. Members upgrade at a discounted $195 onboarding fee.</div>
+                <div style={{ fontSize: 12, color: '#374151' }}>Landlord Rescue Subscription starts at <strong>$185/mo</strong> — includes placement, rent collection &amp; compliance. Otherwise, members upgrade at a discounted $195 onboarding fee.</div>
               </div>
               <Link href="/checkout/landlord" style={{ display: 'inline-block', background: '#0C447C', color: '#fff', fontSize: 12, fontWeight: 700, padding: '9px 16px', borderRadius: 7, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                 See Landlord Rescue →
