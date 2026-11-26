@@ -36,6 +36,7 @@ const GHL_ONBOARDING_TAGS: Record<string, string> = {
   standard: 'Standard Landlord Rescue',
   placement_only: 'Placement Only',
   portfolio: 'Portfolio Investor',
+  membership: 'DIY Membership',
 };
 
 async function notifyGhl(
@@ -221,6 +222,8 @@ async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent) {
 
   // ── Auto-send agreement for signing (best-effort) ─────────────────────────
   // Contact info comes from the payment row (no user account required at this stage).
+  // 'membership' now has its own case in agreement-pdf.tsx's renderAgreementPdf()
+  // switch (MembershipAgreement) — no longer falls through to the Standard template.
   if (updated.contact_email && updated.contact_name) {
     try {
       const result = await sendAgreement({

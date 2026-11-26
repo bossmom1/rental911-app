@@ -19,7 +19,16 @@ import { createSupabaseAdminClient } from '@/lib/supabase';
 import { Resend } from 'resend';
 import { renderAgreementPdf } from '@/lib/agreements/agreement-pdf';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy init — constructing Resend eagerly at module load crashes Next.js's
+// build-time "Collecting page data" step in any environment where
+// RESEND_API_KEY isn't present at build time (Resend's constructor throws
+// synchronously on a missing/empty key). This module is imported by the
+// onboarding webhook, so an eager instance here breaks that route's build too.
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 const FROM_EMAIL = 'Rental911 <noreply@rental911.net>';
 
 const BASE_URL = (() => {
@@ -298,7 +307,7 @@ export async function sendAgreement(opts: SendAgreementOptions): Promise<SendAgr
   const signingUrl = `${BASE_URL}/sign/${token}`;
 
   try {
-    await resend.emails.send({
+    await getResend().emails.send({
       from: FROM_EMAIL,
       to: clientEmail,
       subject: `Action Required: Please sign your ${documentTitle}`,
@@ -316,7 +325,7 @@ export async function sendAgreement(opts: SendAgreementOptions): Promise<SendAgr
     const supplementUrl = process.env.PORTFOLIO_SUPPLEMENT_FORM_URL;
     if (supplementUrl) {
       try {
-        await resend.emails.send({
+        await getResend().emails.send({
           from: FROM_EMAIL,
           to: clientEmail,
           subject: 'Rental911 — Please Complete Your Portfolio Supplement Form',

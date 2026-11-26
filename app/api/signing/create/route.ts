@@ -3,7 +3,15 @@ import { createSupabaseAdminClient } from '@/lib/supabase';
 import { getCurrentUser } from '@/lib/auth';
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy init — constructing Resend eagerly at module load crashes Next.js's
+// build-time "Collecting page data" step in any environment where
+// RESEND_API_KEY isn't present at build time (Resend's constructor throws
+// synchronously on a missing/empty key).
+let _resend: Resend | null = null;
+function getResend(): Resend {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 const FROM_EMAIL = 'Rental911 <noreply@rental911.net>';
 
 type Recipient = { name: string; email: string };
@@ -97,7 +105,7 @@ export async function POST(request: NextRequest) {
     signingUrls.push(signingUrl);
 
     // Send invitation email
-    await resend.emails.send({
+    await getResend().emails.send({
       from: FROM_EMAIL,
       to:   recipient.email.trim(),
       subject: `Action Required: Please sign "${documentTitle}"`,

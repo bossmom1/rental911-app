@@ -917,10 +917,110 @@ function ConsultingAgreement({ clientName, date, flatFee, christineSignatureBase
   );
 }
 
+// ─── DIY Landlord Membership Agreement ────────────────────────────────────────
+
+function MembershipAgreement({ clientName, date, christineSignatureBase64 }:
+  { clientName: string; date: string; christineSignatureBase64?: string }) {
+  return (
+    <Document>
+      <Page size="LETTER" style={S.page}>
+        <InvestorHeader subtitle="DIY Landlord Membership" />
+        <View style={S.inner}>
+          <View style={S.titleBlock}>
+            <Text style={S.docTitle}>STANDARD RENTAL911 MEMBERSHIP AGREEMENT</Text>
+            <Text style={S.docSubtitle}>DIY Landlord Membership — Month-to-Month</Text>
+            <Text style={S.dateLine}>Effective Date: {date}</Text>
+          </View>
+          <Parties clientName={clientName} clientRole="Member / Property Owner" />
+          <Body>
+            This Membership Agreement ("Agreement") is entered into between Rental911, a DBA of
+            Pollard Property Group, and the Client named above ("Member"). This Agreement governs
+            the Member's enrollment in the Rental911 DIY Landlord Membership.
+          </Body>
+
+          <Text style={S.sectionHeader}>SECTION 1 — SCOPE &amp; FEES</Text>
+          <Body>
+            Membership provides coaching, tools, and community support for self-managing landlords:
+            weekly live Q&amp;A, on-demand Q&amp;A replays, a vendor referral list, the Maryland
+            compliance document library, and priority coaching access to Christine. Membership is
+            coaching, not property management — Rental911 coaches Member into becoming a better DIY
+            landlord. Member remains the acting landlord of record and makes all final decisions.
+          </Body>
+          <Body>
+            Member agrees to pay a one-time setup fee of $297, due at enrollment and non-refundable,
+            plus a recurring membership fee of $95 per month, billed monthly starting at enrollment
+            via the payment method on file. Membership is month-to-month — Member may cancel anytime,
+            with no minimum term and no cancellation fee. If a monthly charge is declined, membership
+            access is suspended until payment is resolved; access is not restored retroactively.
+          </Body>
+
+          <Text style={S.sectionHeader}>SECTION 2 — UPGRADE PATH</Text>
+          <Body>
+            While membership is active, Member may upgrade to the Landlord Rescue Subscription
+            (full tenant placement and ongoing landlord support) at a discounted $195 onboarding fee,
+            in lieu of Rental911's standard onboarding fee for that service.
+          </Body>
+
+          <Text style={S.sectionHeader}>SECTION 3 — MEMBER OBLIGATIONS</Text>
+          <Body>
+            Member is solely responsible for tenant screening, lease compliance, rent collection,
+            maintenance, and all applicable landlord-tenant law compliance, including Fair Housing
+            Act obligations. Rental911 provides coaching and resources only and does not act on
+            Member's behalf with tenants, vendors, or any government agency.
+          </Body>
+
+          <Text style={S.sectionHeader}>SECTION 4 — LIMITATION OF LIABILITY</Text>
+          <Body>
+            Rental911's aggregate liability under this Agreement is limited to membership fees paid
+            in the three (3) months preceding the claim. Rental911 is not liable for tenant conduct,
+            property damage, legal outcomes, or Member's decisions. Rental911 is not a law firm and
+            does not provide legal representation.
+          </Body>
+
+          <Text style={S.sectionHeader}>SECTION 5 — TERM, RENEWAL &amp; CANCELLATION</Text>
+          <Body>
+            This Agreement commences on the Effective Date and continues month-to-month. Either party
+            may cancel at any time, with no notice period and no cancellation fee. The $297 setup fee
+            is non-refundable regardless of when Member cancels.
+          </Body>
+
+          <Text style={S.sectionHeader}>SECTION 6 — GOVERNING LAW</Text>
+          <Body>
+            This Agreement is governed by Maryland law. Venue for any action shall be Charles
+            County, MD.
+          </Body>
+
+          <Text style={S.sectionHeader}>SECTION 7 — ENTIRE AGREEMENT</Text>
+          <Body>
+            This Agreement is the entire agreement between the parties regarding the DIY Landlord
+            Membership and supersedes all prior discussions. Modifications must be in writing and
+            signed by both parties.
+          </Body>
+
+          <Text style={S.sectionHeader}>SECTION 8 — CONFIDENTIALITY</Text>
+          <Body>
+            Both parties agree to keep this Agreement and all non-public information exchanged
+            confidential for one (1) year post-termination. Rental911's vendor referrals, compliance
+            resources, pricing, and internal processes are proprietary business information.
+          </Body>
+        </View>
+        <PageFooter label="Rental911 Membership Agreement — CONFIDENTIAL" />
+      </Page>
+
+      {/* Signature page — always the last explicit Page */}
+      <Page size="LETTER" style={S.page}>
+        <InvestorHeader subtitle="DIY Landlord Membership" />
+        <SignatureBlock clientName={clientName} date={date} christineSignatureBase64={christineSignatureBase64} />
+        <PageFooter label="Rental911 Membership Agreement — CONFIDENTIAL" />
+      </Page>
+    </Document>
+  );
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export interface AgreementPdfOptions {
-  tier: string;                       // 'standard' | 'portfolio' | 'placement_only' | 'consulting'
+  tier: string;                       // 'standard' | 'portfolio' | 'placement_only' | 'consulting' | 'membership'
   clientName: string;
   date: string;                       // formatted date string, e.g. "August 5, 2026"
   flatFee?: string;                   // consulting tier only, e.g. "$135.00"
@@ -941,6 +1041,9 @@ export async function renderAgreementPdf(opts: AgreementPdfOptions): Promise<Buf
       break;
     case 'consulting':
       element = <ConsultingAgreement clientName={clientName} date={date} flatFee={flatFee} christineSignatureBase64={christineSignatureBase64} />;
+      break;
+    case 'membership':
+      element = <MembershipAgreement clientName={clientName} date={date} christineSignatureBase64={christineSignatureBase64} />;
       break;
     case 'standard':
     default:
