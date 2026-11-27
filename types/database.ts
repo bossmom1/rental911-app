@@ -46,6 +46,13 @@ export type SubscriptionStatus =
   | 'unpaid'
   | 'paused';
 export type OnboardingFeeStatus = 'not_started' | 'pending_payment' | 'paid';
+/** Distinguishes Membership ($95/mo) portal users from full Subscription
+ *  landlords. Both use role='landlord'; null = existing Subscription/
+ *  placement/portfolio landlords (unaffected by Membership-only fields). */
+export type PlanType = 'membership' | 'subscription';
+export type LeadPaintStatus = 'yes' | 'no' | 'not_sure';
+export type RentalLicenseStatus = 'yes' | 'no' | 'not_sure';
+export type PreferredContactMethod = 'text' | 'email' | 'call';
 
 export interface User {
   id: string;
@@ -57,6 +64,7 @@ export interface User {
   onboarding_complete: boolean;
   onboarding_step: number;
   access_level: AccessLevel;
+  plan_type: PlanType | null;
   stripe_customer_id: string | null;
   /** Landlord payout account (Connect Express) — null until onboarding starts. */
   stripe_account_id: string | null;
@@ -351,6 +359,41 @@ export interface LandlordOnboardingPayment {
   contact_email: string | null;
   contact_name: string | null;
   contact_phone: string | null;
+  /** Public, unguessable token for the post-payment Membership intake-form link. */
+  intake_token: string;
+  intake_email_sent_at: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Membership portal (migration 0028)
+// ---------------------------------------------------------------------------
+
+export interface MembershipIntakeResponse {
+  id: string;
+  payment_id: string;
+  lease_file_path: string | null;
+  lease_file_name: string | null;
+  rental_license_file_path: string | null;
+  rental_license_file_name: string | null;
+  /** Free-form extra uploads — court papers, notices, anything else they want Christine to see pre-kickoff-call. */
+  additional_documents: Array<{ label: string; file_path: string; file_name: string }>;
+  current_pm_software: string | null;
+  lead_paint_status: LeadPaintStatus | null;
+  rental_license_status: RentalLicenseStatus | null;
+  biggest_challenge: string | null;
+  preferred_contact_method: PreferredContactMethod | null;
+  submitted_at: string | null;
+  created_at: string;
+}
+
+export interface QaReplay {
+  id: string;
+  title: string;
+  description: string | null;
+  recording_url: string;
+  recorded_at: string;
+  created_by: string | null;
+  created_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -429,6 +472,8 @@ export interface Database {
       afc_claim_invoices: Table<AfcClaimInvoice>;
       vendor_membership_payments: Table<VendorMembershipPayment, Partial<VendorMembershipPayment> & { vendor_id: string }>;
       landlord_onboarding_payments: Table<LandlordOnboardingPayment>;
+      membership_intake_responses: Table<MembershipIntakeResponse>;
+      qa_replays: Table<QaReplay>;
       employment_verifications: Table<
         EmploymentVerification,
         Partial<EmploymentVerification> & { employer_email: string }

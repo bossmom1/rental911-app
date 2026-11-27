@@ -17,6 +17,7 @@ const NAV: NavItem[] = [
   { label: 'AFC Claims', href: '/admin/afc-claims' },
   { label: 'Financials', href: '/admin/financials' },
   { label: 'Documents', href: '/admin/documents' },
+  { label: 'Q&A Replays', href: '/admin/replays' },
   {
     label: 'Marketing',
     children: [

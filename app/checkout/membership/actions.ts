@@ -3,6 +3,7 @@
 import { createSupabaseAdminClient } from '@/lib/supabase';
 import { chargeMembershipSetupFee, activateMembershipSubscription } from '@/lib/membership-checkout';
 import { MEMBERSHIP_SETUP_FEE_CENTS, MEMBERSHIP_MONTHLY_CENTS } from '@/lib/membership-pricing';
+import { sendMembershipOnboardingEmail } from '@/lib/membership-onboarding';
 
 export interface MembershipContactInput {
   firstName: string;
@@ -115,6 +116,9 @@ export async function activateMembershipSubscriptionAction(
       .update({ stripe_subscription_id: result.subscriptionId })
       .eq('id', paymentId);
   }
+
+  // Subscription is live — fire the onboarding email (non-blocking, logs on failure).
+  void sendMembershipOnboardingEmail(paymentId);
 
   return {
     ok: true,
