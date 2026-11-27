@@ -475,7 +475,8 @@ function StandardAgreement({ clientName, date, christineSignatureBase64 }:
           <Body>
             Rental911 will provide monthly activity reports via the Client portal. Client will receive
             prompt notification of urgent matters. Response times during business hours (Mon–Fri, 9am–5pm ET)
-            are targeted at 24 hours.
+            are targeted at 24 hours. Rental911 will also hold a Quarterly Strategy Review with Client — a
+            one-on-one session covering performance, compliance, and growth opportunities.
           </Body>
           <Text style={S.sectionHeader}>SECTION 9 — INDEMNIFICATION</Text>
           <Body>
