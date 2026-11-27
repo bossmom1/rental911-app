@@ -112,7 +112,7 @@ function MembershipCheckout() {
           <div className="mc-card-body">
             <div className="mc-includes">
               <div className="mc-inc-title">What&#39;s Included</div>
-              <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Weekly live Q&amp;A coaching sessions</span></div>
+              <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Bi-weekly live Q&amp;A coaching sessions (2x/month)</span></div>
               <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>On-Demand Q&amp;A Replays — catch up anytime</span></div>
               <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Southern Maryland vendor referral network</span></div>
               <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Maryland compliance document library</span></div>

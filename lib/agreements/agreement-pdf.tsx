@@ -941,7 +941,7 @@ function MembershipAgreement({ clientName, date, christineSignatureBase64 }:
           <Text style={S.sectionHeader}>SECTION 1 — SCOPE &amp; FEES</Text>
           <Body>
             Membership provides coaching, tools, and community support for self-managing landlords:
-            weekly live Q&amp;A, on-demand Q&amp;A replays, a vendor referral list, the Maryland
+            bi-weekly (twice-monthly) live Q&amp;A, on-demand Q&amp;A replays, a vendor referral list, the Maryland
             compliance document library, and priority coaching access to Christine. Membership is
             coaching, not property management — Rental911 coaches Member into becoming a better DIY
             landlord. Member remains the acting landlord of record and makes all final decisions.
