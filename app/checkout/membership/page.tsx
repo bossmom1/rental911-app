@@ -112,7 +112,7 @@ function MembershipCheckout() {
           <div className="mc-card-body">
             <div className="mc-includes">
               <div className="mc-inc-title">What&#39;s Included</div>
-              <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Weekly live Q&amp;A coaching sessions</span></div>
+              <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Bi-weekly live Q&amp;A coaching sessions (2x/month)</span></div>
               <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>On-Demand Q&amp;A Replays — catch up anytime</span></div>
               <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Southern Maryland vendor referral network</span></div>
               <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Maryland compliance document library</span></div>
@@ -134,6 +134,13 @@ function MembershipCheckout() {
                 <span>Total due at signing</span>
                 <span className="mc-sum-val">{rf(total)}</span>
               </div>
+            </div>
+
+            <div className="mc-includes">
+              <div className="mc-inc-title">What Your $295 Setup Fee Covers</div>
+              <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Existing Lease Review — your current lease checked against the 2026 Maryland Tenant Bill of Rights, Fair Housing, and your county&#39;s addenda</span></div>
+              <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Member File &amp; Platform Setup — your account built and ready day one</span></div>
+              <div className="mc-inc-item"><span className="mc-inc-check">✓</span><span>Compliance Document Library — delivered day one</span></div>
             </div>
 
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 9, padding: '12px 16px', marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>

@@ -17,11 +17,28 @@ import {
  * subscription immediately (no 30-day-trial deferral toggle; the product is
  * month-to-month from day one).
  *
- * Two Stripe objects, same reasoning as the onboarding flow: the $297 setup
+ * Two Stripe objects, same reasoning as the onboarding flow: the $295 setup
  * fee is a directly-confirmed PaymentIntent; the $95/mo is a separate real
  * Stripe Subscription. The DB write that marks the payment row 'paid' happens
  * in the webhook (`payment_intent.succeeded`), not here.
  */
+
+/**
+ * TEMPORARY TEST OVERRIDE — remove after the live Stripe test is verified.
+ * Per the stripe-connect-billing.md protocol: this checkout runs on raw
+ * PaymentIntents, not Checkout Sessions, so a Stripe coupon/promotion code
+ * cannot apply here. Instead: a tightly-scoped $1 price override, gated to
+ * one exact email, never $0 so a real charge/refund cycle is exercised.
+ * Removal checklist: delete this block + its two call sites below, confirm
+ * `git diff` is clean, confirm no leftover env var/flag on Vercel, refund
+ * the test charge(s) in Stripe.
+ */
+const TEST_OVERRIDE_EMAIL = 'ppgdropbox@gmail.com';
+const TEST_OVERRIDE_AMOUNT_CENTS = 100; // $1 — never $0
+
+function isTestOverrideEmail(email: string | null | undefined): boolean {
+  return (email ?? '').trim().toLowerCase() === TEST_OVERRIDE_EMAIL;
+}
 
 export interface MembershipBillingContact {
   email: string;
@@ -55,16 +72,20 @@ export async function chargeMembershipSetupFee(
       invoice_settings: { default_payment_method: paymentMethodId },
     });
 
+    const useTestOverride = isTestOverrideEmail(contact.email);
     const intent = await stripe.paymentIntents.create({
-      amount: MEMBERSHIP_SETUP_FEE_CENTS,
+      amount: useTestOverride ? TEST_OVERRIDE_AMOUNT_CENTS : MEMBERSHIP_SETUP_FEE_CENTS,
       currency: 'usd',
       customer: customerId,
       payment_method: paymentMethodId,
       confirm: true,
       automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
-      description: MEMBERSHIP_SETUP_FEE_NAME,
+      description: useTestOverride ? `${MEMBERSHIP_SETUP_FEE_NAME} [TEST OVERRIDE $1]` : MEMBERSHIP_SETUP_FEE_NAME,
       receipt_email: contact.email,
-      metadata: { rental911_landlord_onboarding_payment_id: paymentId },
+      metadata: {
+        rental911_landlord_onboarding_payment_id: paymentId,
+        ...(useTestOverride ? { rental911_test_override: 'true' } : {}),
+      },
     });
 
     return {
@@ -89,23 +110,28 @@ export async function chargeMembershipSetupFee(
 export async function activateMembershipSubscription(
   customerId: string,
   paymentId: string,
-  paymentMethodId: string
+  paymentMethodId: string,
+  contactEmail?: string | null
 ): Promise<MembershipChargeResult & { subscriptionId?: string }> {
   const stripe = getStripe();
 
   try {
+    const useTestOverride = isTestOverrideEmail(contactEmail);
     const price = await stripe.prices.create({
       currency: 'usd',
-      unit_amount: MEMBERSHIP_MONTHLY_CENTS,
+      unit_amount: useTestOverride ? TEST_OVERRIDE_AMOUNT_CENTS : MEMBERSHIP_MONTHLY_CENTS,
       recurring: { interval: 'month', interval_count: 1 },
-      product_data: { name: MEMBERSHIP_SUBSCRIPTION_NAME },
+      product_data: { name: useTestOverride ? `${MEMBERSHIP_SUBSCRIPTION_NAME} [TEST OVERRIDE $1]` : MEMBERSHIP_SUBSCRIPTION_NAME },
     });
 
     const subscription = await stripe.subscriptions.create({
       customer: customerId,
       items: [{ price: price.id, quantity: 1 }],
       default_payment_method: paymentMethodId,
-      metadata: { rental911_landlord_onboarding_payment_id: paymentId },
+      metadata: {
+        rental911_landlord_onboarding_payment_id: paymentId,
+        ...(useTestOverride ? { rental911_test_override: 'true' } : {}),
+      },
       payment_behavior: 'default_incomplete',
       expand: ['latest_invoice.payment_intent'],
     });

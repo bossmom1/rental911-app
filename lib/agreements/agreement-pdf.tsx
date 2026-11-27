@@ -475,7 +475,8 @@ function StandardAgreement({ clientName, date, christineSignatureBase64 }:
           <Body>
             Rental911 will provide monthly activity reports via the Client portal. Client will receive
             prompt notification of urgent matters. Response times during business hours (Mon–Fri, 9am–5pm ET)
-            are targeted at 24 hours.
+            are targeted at 24 hours. Rental911 will also hold a Quarterly Strategy Review with Client — a
+            one-on-one session covering performance, compliance, and growth opportunities.
           </Body>
           <Text style={S.sectionHeader}>SECTION 9 — INDEMNIFICATION</Text>
           <Body>
@@ -941,13 +942,13 @@ function MembershipAgreement({ clientName, date, christineSignatureBase64 }:
           <Text style={S.sectionHeader}>SECTION 1 — SCOPE &amp; FEES</Text>
           <Body>
             Membership provides coaching, tools, and community support for self-managing landlords:
-            weekly live Q&amp;A, on-demand Q&amp;A replays, a vendor referral list, the Maryland
+            bi-weekly (twice-monthly) live Q&amp;A, on-demand Q&amp;A replays, a vendor referral list, the Maryland
             compliance document library, and priority coaching access to Christine. Membership is
             coaching, not property management — Rental911 coaches Member into becoming a better DIY
             landlord. Member remains the acting landlord of record and makes all final decisions.
           </Body>
           <Body>
-            Member agrees to pay a one-time setup fee of $297, due at enrollment and non-refundable,
+            Member agrees to pay a one-time setup fee of $295, due at enrollment and non-refundable,
             plus a recurring membership fee of $95 per month, billed monthly starting at enrollment
             via the payment method on file. Membership is month-to-month — Member may cancel anytime,
             with no minimum term and no cancellation fee. If a monthly charge is declined, membership
@@ -980,7 +981,7 @@ function MembershipAgreement({ clientName, date, christineSignatureBase64 }:
           <Text style={S.sectionHeader}>SECTION 5 — TERM, RENEWAL &amp; CANCELLATION</Text>
           <Body>
             This Agreement commences on the Effective Date and continues month-to-month. Either party
-            may cancel at any time, with no notice period and no cancellation fee. The $297 setup fee
+            may cancel at any time, with no notice period and no cancellation fee. The $295 setup fee
             is non-refundable regardless of when Member cancels.
           </Body>
 

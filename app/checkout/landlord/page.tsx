@@ -85,6 +85,7 @@ function LandlordCheckout() {
           `Invoiced monthly at $${STANDARD_MONTHLY_PER_UNIT_CENTS / 100}/unit — Tenant Placement Plus: $${STANDARD_ONBOARDING_FEE_PER_UNIT_CENTS / 100} one-time fee`,
           "Tenant placement at vacancy: 60% of 1st month's rent (regional marketing, applicant vetting, MD disclosures, move-in walk-through & key hand-off)",
           "Annual lease renewal (Year 2+): 50% of 1st month's rent per unit — tenant re-verification & MD-compliant renewal execution",
+          'Quarterly Strategy Review — a 1-on-1 with Christine covering performance, compliance, and growth opportunities',
         ]
       : [
           'Rent collected through the Rental911 portal — deposited directly to your bank',
@@ -93,6 +94,7 @@ function LandlordCheckout() {
           `Invoiced quarterly at $${STANDARD_QUARTERLY_PER_UNIT_CENTS / 100}/unit every 3 months — Tenant Placement Plus: $${STANDARD_ONBOARDING_FEE_PER_UNIT_CENTS / 100} one-time fee`,
           "Tenant placement at vacancy: 60% of 1st month's rent (regional marketing, applicant vetting, MD disclosures, move-in walk-through & key hand-off)",
           "Annual lease renewal (Year 2+): 50% of 1st month's rent per unit — tenant re-verification & MD-compliant renewal execution",
+          'Quarterly Strategy Review — a 1-on-1 with Christine covering performance, compliance, and growth opportunities',
         ];
 
   async function onPay() {
